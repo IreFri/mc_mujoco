@@ -258,17 +258,11 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
 {
   const auto & mbc = robot.mbc();
   const auto & rjo = robot.module().ref_joint_order();
-  if(rjo.size() != mj_jnt_names.size())
-  {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
-        "[mc_mujoco] Missmatch in model for {}, reference joint order has {} joints but MuJoCo models has {} joints",
-        name, rjo.size(), mj_jnt_names.size());
-  }
+
   mj_to_mbc.resize(0);
   mj_prev_ctrl_q.resize(0);
   mj_prev_ctrl_alpha.resize(0);
   mj_jnt_to_rjo.resize(0);
-  mj_to_mbc.resize(0);
   encoders = std::vector<double>(rjo.size(), 0.0);
   alphas = std::vector<double>(rjo.size(), 0.0);
   torques = std::vector<double>(rjo.size(), 0.0);
@@ -288,9 +282,12 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
       rjo_idx = std::distance(rjo.begin(), rjo_it);
     }
     mj_jnt_to_rjo.push_back(rjo_idx);
-    if(robot.hasJoint(jn))
+    const auto motor = std::string(robot.name()+"_"+jn+"_motor");
+    auto it = std::find(mj_mot_names.begin(), mj_mot_names.end(), motor);
+    if(robot.hasJoint(jn) && it != mj_mot_names.end())
     {
       auto jIndex = robot.jointIndexByName(jn);
+      mj_mot_to_rjo.push_back(rjo_idx);
       mj_to_mbc.push_back(jIndex);
       if(robot.mb().joint(jIndex).dof() != 1)
       {
@@ -307,9 +304,11 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
     }
     else
     {
+      mj_mot_to_rjo.push_back(-1);
       mj_to_mbc.push_back(-1);
     }
   }
+
   mj_ctrl = mj_prev_ctrl_q;
   mj_next_ctrl_q = mj_prev_ctrl_q;
   mj_next_ctrl_alpha = mj_prev_ctrl_alpha;
@@ -394,6 +393,53 @@ void MjSimImpl::startSimulation()
   }
   controller->init(robots[0].encoders);
   controller->running = true;
+
+  auto qpos = [this](int i) -> double
+  {
+    return data->qpos[i+7];
+  };
+
+  auto qpos_spring = [this](int i) -> double
+  {
+    return model->qpos_spring[i+7];
+  };
+
+  auto qvel = [this](int i) -> double
+  {
+    return data->qvel[i+6];
+  };
+
+  auto qfrc_passive = [this](int i) -> double
+  {
+    return data->qfrc_passive[i+6];
+  };
+
+  auto damping = [this](int i) -> double
+  {
+    return model->dof_damping[i+6];
+  };
+
+  auto stiffness = [this](int i) -> double
+  {
+    return model->jnt_stiffness[i+1];
+  };
+
+  const auto & mj_jnt_names = robots[0].mj_jnt_names;
+  for(int i = 0; i < mj_jnt_names.size(); ++i)
+  {
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_stiffness", this, [stiffness, i]() { return stiffness(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_damping", this, [damping, i]() { return damping(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos", this, [qpos, i]() { return qpos(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qvel", this, [qvel, i]() { return qvel(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qfrc_passive", this, [qfrc_passive, i]() { return qfrc_passive(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos_spring", this, [qpos_spring, i]() { return qpos_spring(i); });
+
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_stiffness", this, [qpos, stiffness, i]() { return -stiffness(i) * qpos(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_damping", this, [qvel, damping, i]() { return -damping(i) * qvel(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive", this, [qpos, stiffness, qvel, damping, i]() { return -stiffness(i) * qpos(i) -damping(i) * qvel(i); });
+    // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
+    //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
+  }
 }
 
 void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model, mjData * data)
@@ -503,16 +549,16 @@ void MjRobot::updateControl(const mc_rbdyn::Robot & robot)
 
 void MjRobot::sendControl(const mjModel & model, mjData & data, size_t interp_idx, size_t frameskip_)
 {
-  for(size_t i = 0; i < mj_ctrl.size(); ++i)
+  for(size_t i = 0, j = 0; j < mj_mot_ids.size(); ++j)
   {
-    auto mot_id = mj_mot_ids[i];
-    auto pos_act_id = mj_pos_act_ids[i];
-    auto vel_act_id = mj_vel_act_ids[i];
-    auto rjo_id = mj_jnt_to_rjo[i];
-    if(rjo_id == -1)
+    auto mot_id = mj_mot_ids[j];
+    auto rjo_id = mj_mot_to_rjo[j];
+    if(rjo_id == - 1)
     {
       continue;
     }
+    auto pos_act_id = mj_pos_act_ids[i];
+    auto vel_act_id = mj_vel_act_ids[i];
     // compute desired q using interpolation
     double q_ref = (interp_idx + 1) * (mj_next_ctrl_q[i] - mj_prev_ctrl_q[i]) / frameskip_;
     q_ref += mj_prev_ctrl_q[i];
@@ -534,6 +580,7 @@ void MjRobot::sendControl(const mjModel & model, mjData & data, size_t interp_id
     {
       data.ctrl[vel_act_id] = alpha_ref;
     }
+    ++ i;
   }
 }
 
@@ -572,6 +619,166 @@ void MjSimImpl::simStep()
   // take one step in simulation
   // model.opt.timestep will be used here
   mj_step(model, data);
+
+  // To display contacts
+  // for (unsigned int i = 0; i < data->ncon; ++i)
+  // {
+  //   int body1_id = model->geom_bodyid[data->contact[i].geom1];
+  //   int body2_id = model->geom_bodyid[data->contact[i].geom2];
+  //   const char * body1_c =  mj_id2name(model, mjOBJ_BODY, body1_id);
+  //   const char * body2_c =  mj_id2name(model, mjOBJ_BODY, body2_id);
+  //   std::cout << "Body1: " << body1_c << "\t" << "Body2: " << body2_c << std::endl;
+  // }
+
+  // mj_printData(model, data, "/tmp/ntm.txt");
+
+
+// Little code to calculate stiffness force and damping force
+  // mc_rtc::log::error("Robot {} nv {} nq {}", robots[0].name, model->nv, model->nq);
+
+  auto qpos = [this](int i) -> double
+  {
+    return data->qpos[i+7];
+  };
+
+  auto qpos_spring = [this](int i) -> double
+  {
+    return model->qpos_spring[i+7];
+  };
+
+  auto qvel = [this](int i) -> double
+  {
+    return data->qvel[i+6];
+  };
+
+  auto qfrc_passive = [this](int i) -> double
+  {
+    return data->qfrc_passive[i+6];
+  };
+
+  auto damping = [this](int i) -> double
+  {
+    return model->dof_damping[i+6];
+  };
+
+  auto stiffness = [this](int i) -> double
+  {
+    return model->jnt_stiffness[i+1];
+  };
+
+  // for(int i = 0; i < robots[0].mj_jnt_names.size(); ++i)
+  // {
+  //   mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
+  //     i, robots[0].mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
+  // }
+
+  // for(int i = 0; i < robots[0].mj_jnt_names.size(); ++i)
+  // {
+  //   mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t passive {:.6f}",
+  //     i, robots[0].mj_jnt_names[i], stiffness(i), damping(i), qfrc_passive(i)); 
+  // }
+
+  auto iterator_P10 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_10");
+  auto iterator_P9 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_9");
+  auto iterator_P8 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_8");
+  auto iterator_P7 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_7");
+  auto iterator_P6 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_6");
+  auto iterator_P5 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_5");
+  auto iterator_P4 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_4");
+  auto iterator_P3 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_3");
+  auto iterator_P2 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_2");
+  auto iterator_P1 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_1");
+
+  if(iterator_P10 != robots[0].mj_jnt_names.end() & iterator_P9 != robots[0].mj_jnt_names.end() & iterator_P8 != robots[0].mj_jnt_names.end() & iterator_P7 != robots[0].mj_jnt_names.end() & iterator_P6 != robots[0].mj_jnt_names.end() & iterator_P5 != robots[0].mj_jnt_names.end() & iterator_P4 != robots[0].mj_jnt_names.end() & iterator_P3 != robots[0].mj_jnt_names.end() & iterator_P2 != robots[0].mj_jnt_names.end() & iterator_P1 != robots[0].mj_jnt_names.end())
+  {
+    int id_P10 = iterator_P10 - robots[0].mj_jnt_names.begin();
+    int id_P9 = iterator_P9 - robots[0].mj_jnt_names.begin();
+    int id_P8 = iterator_P8 - robots[0].mj_jnt_names.begin();
+    int id_P7 = iterator_P7 - robots[0].mj_jnt_names.begin();
+    int id_P6 = iterator_P6 - robots[0].mj_jnt_names.begin();
+    int id_P5 = iterator_P5 - robots[0].mj_jnt_names.begin();
+    int id_P4 = iterator_P4 - robots[0].mj_jnt_names.begin();
+    int id_P3 = iterator_P3 - robots[0].mj_jnt_names.begin();
+    int id_P2 = iterator_P2 - robots[0].mj_jnt_names.begin();
+    int id_P1 = iterator_P1 - robots[0].mj_jnt_names.begin();
+    // std::cout << " id_P10: " << id_P10;
+    // double Stiff_force_9 = model->jnt_stiffness[id_P9+1]*(data->qpos[id_P10+7]-data->qpos[id_P9+7]);
+    // double Stiff_force_8 = model->jnt_stiffness[id_P8+1]*(data->qpos[id_P9+7]-data->qpos[id_P8+7]);
+    // double Stiff_force_7 = model->jnt_stiffness[id_P7+1]*(data->qpos[id_P8+7]-data->qpos[id_P7+7]);
+    // double Stiff_force_6 = model->jnt_stiffness[id_P6+1]*(data->qpos[id_P7+7]-data->qpos[id_P6+7]);
+    // double Stiff_force_5 = model->jnt_stiffness[id_P5+1]*(data->qpos[id_P6+7]-data->qpos[id_P5+7]);
+    // double Stiff_force_4 = model->jnt_stiffness[id_P4+1]*(data->qpos[id_P5+7]-data->qpos[id_P4+7]);
+    // double Stiff_force_3 = model->jnt_stiffness[id_P3+1]*(data->qpos[id_P4+7]-data->qpos[id_P3+7]);
+    // double Stiff_force_2 = model->jnt_stiffness[id_P2+1]*(data->qpos[id_P3+7]-data->qpos[id_P2+7]);
+    // double Stiff_force_1 = model->jnt_stiffness[id_P1+1]*(data->qpos[id_P2+7]-data->qpos[id_P1+7]);
+    double Stiff_force_10 = model->jnt_stiffness[id_P10+1]*data->qpos[id_P10+7];
+    double Stiff_force_9 = model->jnt_stiffness[id_P9+1]*data->qpos[id_P9+7];
+    double Stiff_force_8 = model->jnt_stiffness[id_P8+1]*data->qpos[id_P8+7];
+    double Stiff_force_7 = model->jnt_stiffness[id_P7+1]*data->qpos[id_P7+7];
+    double Stiff_force_6 = model->jnt_stiffness[id_P6+1]*data->qpos[id_P6+7];
+    double Stiff_force_5 = model->jnt_stiffness[id_P5+1]*data->qpos[id_P5+7];
+    double Stiff_force_4 = model->jnt_stiffness[id_P4+1]*data->qpos[id_P4+7];
+    double Stiff_force_3 = model->jnt_stiffness[id_P3+1]*data->qpos[id_P3+7];
+    double Stiff_force_2 = model->jnt_stiffness[id_P2+1]*data->qpos[id_P2+7];
+    double Stiff_force_1 = model->jnt_stiffness[id_P1+1]*data->qpos[id_P1+7];
+
+    // double Damp_force_9 = model->dof_damping[id_P9+6]*(data->qvel[id_P10+6]-data->qvel[id_P9+6]);
+    // double Damp_force_8 = model->dof_damping[id_P8+6]*(data->qvel[id_P9+6]-data->qvel[id_P8+6]);
+    // double Damp_force_7 = model->dof_damping[id_P7+6]*(data->qvel[id_P8+6]-data->qvel[id_P7+6]);
+    // double Damp_force_6 = model->dof_damping[id_P6+6]*(data->qvel[id_P7+6]-data->qvel[id_P6+6]);
+    // double Damp_force_5 = model->dof_damping[id_P5+6]*(data->qvel[id_P6+6]-data->qvel[id_P5+6]);
+    // double Damp_force_4 = model->dof_damping[id_P4+6]*(data->qvel[id_P5+6]-data->qvel[id_P4+6]);
+    // double Damp_force_3 = model->dof_damping[id_P3+6]*(data->qvel[id_P4+6]-data->qvel[id_P3+6]);
+    // double Damp_force_2 = model->dof_damping[id_P2+6]*(data->qvel[id_P3+6]-data->qvel[id_P2+6]);
+    // double Damp_force_1 = model->dof_damping[id_P1+6]*(data->qvel[id_P2+6]-data->qvel[id_P1+6]);
+    double Damp_force_10 = model->dof_damping[id_P9+6]*data->qvel[id_P10+6];
+    double Damp_force_9 = model->dof_damping[id_P9+6]*data->qvel[id_P9+6];
+    double Damp_force_8 = model->dof_damping[id_P8+6]*data->qvel[id_P8+6];
+    double Damp_force_7 = model->dof_damping[id_P7+6]*data->qvel[id_P7+6];
+    double Damp_force_6 = model->dof_damping[id_P6+6]*data->qvel[id_P6+6];
+    double Damp_force_5 = model->dof_damping[id_P5+6]*data->qvel[id_P5+6];
+    double Damp_force_4 = model->dof_damping[id_P4+6]*data->qvel[id_P4+6];
+    double Damp_force_3 = model->dof_damping[id_P3+6]*data->qvel[id_P3+6];
+    double Damp_force_2 = model->dof_damping[id_P2+6]*data->qvel[id_P2+6];
+    double Damp_force_1 = model->dof_damping[id_P1+6]*data->qvel[id_P1+6];
+    // std::cout << " Stiff_force: " << Stiff_force_9+Stiff_force_8+Stiff_force_7+Stiff_force_6+Stiff_force_5+Stiff_force_4+Stiff_force_3+Stiff_force_2+Stiff_force_1;
+    // std::cout << " Damp_force: " << Damp_force_9+Damp_force_8+Damp_force_7+Damp_force_6+Damp_force_5+Damp_force_4+Damp_force_3+Damp_force_2+Damp_force_1;
+    // std::cout << " Passive: " << qfrc_passive(id_P10)+qfrc_passive(id_P9)+qfrc_passive(id_P8)+qfrc_passive(id_P7)+qfrc_passive(id_P6)+qfrc_passive(id_P5)+qfrc_passive(id_P4)+qfrc_passive(id_P3)+qfrc_passive(id_P2)+qfrc_passive(id_P1);
+
+    // std::cout << " Stiff_force_10: " << Stiff_force_10;
+    // std::cout << " Stiff_force_9: " << Stiff_force_9;
+    // std::cout << " Stiff_force_8: " << Stiff_force_8;
+    // std::cout << " Stiff_force_7: " << Stiff_force_7;
+    // std::cout << " Stiff_force_6: " << Stiff_force_6;
+    // std::cout << " Stiff_force_5: " << Stiff_force_5;
+    // std::cout << " Stiff_force_4: " << Stiff_force_4;
+    // std::cout << " Stiff_force_3: " << Stiff_force_3;
+    // std::cout << " Stiff_force_2: " << Stiff_force_2;
+    // std::cout << " Stiff_force_1: " << Stiff_force_1;
+
+    // std::cout << " Damp_force_10: " << Damp_force_10;
+    // std::cout << " Damp_force_9: " << Damp_force_9;
+    // std::cout << " Damp_force_8: " << Damp_force_8;
+    // std::cout << " Damp_force_7: " << Damp_force_7;
+    // std::cout << " Damp_force_6: " << Damp_force_6;
+    // std::cout << " Damp_force_5: " << Damp_force_5;
+    // std::cout << " Damp_force_4: " << Damp_force_4;
+    // std::cout << " Damp_force_3: " << Damp_force_3;
+    // std::cout << " Damp_force_2: " << Damp_force_2;
+    // std::cout << " Damp_force_1: " << Damp_force_1;
+
+
+  } 
+
+
+// To check is it is correct the id with the name
+  // auto iterator_P10 = std::find(robots[0].mj_jnt_names.begin(), robots[0].mj_jnt_names.end(), "hrp4j_soft_L_PHALANX_10");
+  // if(iterator_P10 != robots[0].mj_jnt_names.end())
+  // {
+  //   int id_P10 = iterator_P10 - robots[0].mj_jnt_names.begin();
+  //   mc_rtc::log::info("Iterator {} of L_PHALANX_10", id_P10);
+  // }
+  // std::cout << std::endl;
 }
 
 void MjSimImpl::resetSimulation(const std::map<std::string, std::vector<double>> & reset_qs,
