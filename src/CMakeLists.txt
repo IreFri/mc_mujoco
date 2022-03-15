@@ -91,3 +91,38 @@ install(EXPORT mc_mujocoTargets
   FILE mc_mujocoTargets.cmake
   NAMESPACE mc_mujoco::
   DESTINATION lib/cmake/mc_mujoco)
+
+# Here I add the part relative to the range sensor device (I took from mc_mujoco/src/CMAkeLists.txt)
+
+set(devices_INC "${PROJECT_SOURCE_DIR}/include/mc_mujoco/devices")
+set(devices_BINC "${PROJECT_BINARY_DIR}/include/mc_mujoco/devices")
+set(devices_HDR
+  ${devices_INC}/RangeSensor.h
+)
+set(devices_SRC
+  devices/RangeSensor.cpp
+)
+configure_file("${devices_INC}/api.in.h" "${devices_BINC}/api.h" @ONLY)
+list(APPEND devices_HDR "${devices_BINC}/api.h")
+
+message("${devices_HDR}")
+message("${devices_INC}")
+message("${devices_BINC}")
+message("${PROJECT_SOURCE_DIR}")
+message("${PROJECT_BINARY_DIR}")
+
+add_library(mc_mujoco_devices SHARED ${devices_SRC} ${devices_HDR})
+add_library(mc_mujoco::devices ALIAS mc_mujoco_devices)
+set_target_properties(mc_mujoco_devices PROPERTIES EXPORT_NAME devices)
+target_include_directories(mc_mujoco_devices PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(mc_mujoco_devices PUBLIC mc_rtc::mc_rbdyn)
+target_compile_definitions(mc_mujoco_devices PRIVATE -DMC_MUJOCO_DEVICES_EXPORTS)
+install(FILES ${devices_HDR} DESTINATION include/mc_mujoco/devices)
+install(TARGETS mc_mujoco_devices
+  EXPORT ${TARGETS_EXPORT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+target_link_libraries(mc_mujoco_lib PUBLIC mc_mujoco::devices)
