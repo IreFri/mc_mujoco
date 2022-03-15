@@ -12,6 +12,8 @@
 
 #include <condition_variable>
 
+#include <mc_mujoco/devices/RangeSensor.h>
+
 namespace mc_mujoco
 {
 
@@ -91,6 +93,10 @@ struct MjRobot
   std::map<std::string, Eigen::Vector3d> gyros;
   /** Accelerometer readings */
   std::map<std::string, Eigen::Vector3d> accelerometers;
+  /** Range sensors reading */
+  std::map<std::string, double> ranges;
+  /** Range sensors updating */
+  std::map<std::string, mc_mujoco::RangeSensor*> ranges_ptr;
 
   /** Proportional gains for low-level PD control (read from file) */
   std::vector<double> default_kp = {};
@@ -130,6 +136,8 @@ struct MjRobot
   std::unordered_map<std::string, int> mc_bs_to_mj_gyro_id;
   /** Correspondance from mc-rtc body sensor's name to MuJoCo accelerometer sensor id, -1 if absent */
   std::unordered_map<std::string, int> mc_bs_to_mj_accelerometer_id;
+  /** Correspondance from mc-rtc range sensor's name to MuJoCo range sensor id, -1 if absent */
+  std::unordered_map<std::string, int> mc_rs_to_mj_ranger_id;
 
   /** Transform from index in mj_mot_names to index in mbc, -1 if not in mbc */
   std::vector<int> mj_to_mbc;
