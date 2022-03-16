@@ -253,13 +253,15 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
                    mc_bs_to_mj_accelerometer_id);
   }
 
-  // Initialization of range sensors
+  // get of range sensors
   auto getRangeSensors = [] (mc_rbdyn::Robot & robot) -> std::vector<mc_mujoco::RangeSensor *>
   {
     std::vector<mc_mujoco::RangeSensor *> out;
     const auto & module = robot.module();
+    mc_rtc::log::error("[mc_mujoco] Robot {} Devices {}", robot.name(), module.devices().size());
     for(const auto & s : module.devices())
     {
+      mc_rtc::log::error("[mc_mujoco] Device {}", s->name());
       auto sensor = dynamic_cast<mc_mujoco::RangeSensor *>(s.get());
       if(sensor)
       {
@@ -270,8 +272,10 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
     return out;
   };
 
+  mc_rtc::log::error("[mc_mujoco] Initialization of range sensors");
   for(mc_mujoco::RangeSensor * rs : getRangeSensors(const_cast<mc_rbdyn::Robot &>(robot)))
   {
+    mc_rtc::log::error("[mc_mujoco] Range sensor name {}", rs->name());
     ranges[rs->name()] = 0;
     ranges_ptr[rs->name()] = rs;
     init_sensor_id("range sensor", "range sensor", rs->name(), "ranger", mjSENS_RANGEFINDER, mc_rs_to_mj_ranger_id);
@@ -350,6 +354,10 @@ void MjSimImpl::setSimulationInitialState()
     {
       const auto & robot = controller->robots().robot(r.name);
       r.initialize(model, robot);
+      for(const auto & rs : r.ranges_ptr)
+      {
+        rs.second->addToLogger(controller->controller().logger(), robot.name());
+      }
       if(r.root_joint.size())
       {
         r.root_qpos_idx = qInit.size();
@@ -829,6 +837,7 @@ bool MjSimImpl::render()
     };
     flag_to_gui("Show contact points [C]", mjVIS_CONTACTPOINT);
     flag_to_gui("Show contact forces [F]", mjVIS_CONTACTFORCE);
+    flag_to_gui("Show rangefinder [R]", mjVIS_RANGEFINDER);
     auto group_to_checkbox = [&](size_t group, bool last) {
       bool show = options.geomgroup[group];
       if(ImGui::Checkbox(fmt::format("{}", group).c_str(), &show))

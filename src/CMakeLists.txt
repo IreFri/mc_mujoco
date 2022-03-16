@@ -61,7 +61,7 @@ configure_file(config.in.h "${CMAKE_CURRENT_BINARY_DIR}/include/config.h")
 
 file(COPY "${MUJOCO_INCLUDE_DIR}/glfw3.h" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/include/GLFW/")
 
-add_library(mc_mujoco_lib STATIC ${mc_mujoco_lib_SRC} ${imgui_SRC} ${implot_SRC} ${ImGuizmo_SRC} ${mc_rtc-imgui-SRC} ${mc_rtc-imgui-HDR} $<TARGET_OBJECTS:pugixml>)
+add_library(mc_mujoco_lib SHARED ${mc_mujoco_lib_SRC} ${imgui_SRC} ${implot_SRC} ${ImGuizmo_SRC} ${mc_rtc-imgui-SRC} ${mc_rtc-imgui-HDR} $<TARGET_OBJECTS:pugixml>)
 target_include_directories(mc_mujoco_lib PUBLIC $<BUILD_INTERFACE:${MUJOCO_INCLUDE_DIR}>$<INSTALL_INTERFACE:include>)
 target_include_directories(mc_mujoco_lib PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/include")
 target_include_directories(mc_mujoco_lib PRIVATE "${imgui_DIR}" "${implot_DIR}" "${mc_rtc-imgui_DIR}" "${assets_DIR}" "${ImGuizmo_DIR}" "${PROJECT_SOURCE_DIR}/ext/pugixml")
@@ -74,23 +74,12 @@ find_package(Boost REQUIRED COMPONENTS program_options)
 add_executable(mc_mujoco main.cpp)
 target_link_libraries(mc_mujoco PRIVATE mc_mujoco_lib Boost::program_options Boost::disable_autolinking)
 
+install(FILES mj_sim.h mj_configuration.h DESTINATION include/mc_mujoco)
+
 install(TARGETS mc_mujoco
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib)
-
-install(FILES mj_sim.h mj_configuration.h DESTINATION include/mc_mujoco)
-
-install(TARGETS mc_mujoco_lib
-  EXPORT mc_mujocoTargets
-  RUNTIME DESTINATION bin
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib)
-
-install(EXPORT mc_mujocoTargets
-  FILE mc_mujocoTargets.cmake
-  NAMESPACE mc_mujoco::
-  DESTINATION lib/cmake/mc_mujoco)
 
 # Here I add the part relative to the range sensor device (I took from mc_mujoco/src/CMAkeLists.txt)
 
@@ -105,12 +94,6 @@ set(devices_SRC
 configure_file("${devices_INC}/api.in.h" "${devices_BINC}/api.h" @ONLY)
 list(APPEND devices_HDR "${devices_BINC}/api.h")
 
-message("${devices_HDR}")
-message("${devices_INC}")
-message("${devices_BINC}")
-message("${PROJECT_SOURCE_DIR}")
-message("${PROJECT_BINARY_DIR}")
-
 add_library(mc_mujoco_devices SHARED ${devices_SRC} ${devices_HDR})
 add_library(mc_mujoco::devices ALIAS mc_mujoco_devices)
 set_target_properties(mc_mujoco_devices PROPERTIES EXPORT_NAME devices)
@@ -118,11 +101,16 @@ target_include_directories(mc_mujoco_devices PUBLIC $<BUILD_INTERFACE:${PROJECT_
 target_link_libraries(mc_mujoco_devices PUBLIC mc_rtc::mc_rbdyn)
 target_compile_definitions(mc_mujoco_devices PRIVATE -DMC_MUJOCO_DEVICES_EXPORTS)
 install(FILES ${devices_HDR} DESTINATION include/mc_mujoco/devices)
-install(TARGETS mc_mujoco_devices
-  EXPORT ${TARGETS_EXPORT_NAME}
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
-)
 
-target_link_libraries(mc_mujoco_lib PUBLIC mc_mujoco::devices)
+target_link_libraries(mc_mujoco_lib PRIVATE mc_mujoco::devices)
+
+install(TARGETS mc_mujoco_lib mc_mujoco_devices
+  EXPORT mc_mujocoTargets
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib)
+
+install(EXPORT mc_mujocoTargets
+  FILE mc_mujocoTargets.cmake
+  NAMESPACE mc_mujoco::
+  DESTINATION lib/cmake/mc_mujoco)

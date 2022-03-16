@@ -73,6 +73,11 @@ void uiEvent(mjuiState * state)
     {
       mj_sim->options.flags[mjVIS_CONTACTFORCE] = !mj_sim->options.flags[mjVIS_CONTACTFORCE];
     }
+    // R: show rangefinder
+    if(state->key == GLFW_KEY_R)
+    {
+      mj_sim->options.flags[mjVIS_RANGEFINDER] = !mj_sim->options.flags[mjVIS_RANGEFINDER];
+    }
     // 0-mjNGROUP: Toggle visiblity of geom groups
     if(state->key >= GLFW_KEY_0 && state->key < (GLFW_KEY_0 + mjNGROUP))
     {
