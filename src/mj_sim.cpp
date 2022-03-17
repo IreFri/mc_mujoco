@@ -796,6 +796,7 @@ void MjRobot::updateControl(const mc_rbdyn::Robot & robot)
       ctrl_idx++;
     }
   }
+
 }
 
 void MjRobot::sendControl(const mjModel & model,
@@ -862,8 +863,105 @@ bool MjSimImpl::controlStep()
     for(auto & r : robots)
     {
       r.updateControl(controller->robots().robot(r.name));
+
+
+
+      // Update variable stiffness
+      
+      if(r.name == "hrp4j_soft")
+      {   
+        const auto & mj_jnt_names = r.mj_jnt_names;
+        const auto & mj_jnt_ids = r.mj_jnt_ids;
+
+        const double stiffness_low = 0;
+        const double stiffness_high = 100; 
+        const double angle_low = 0;
+        const double angle_high = 1;
+
+        auto qpos = [this](int i) -> double
+        {
+          return data->qpos[i+7];
+        };
+
+        auto qvel = [this](int i) -> double
+        {
+          return data->qvel[i+6];
+        };
+
+        auto stiffness = [this](int i) -> double
+        {
+          return model->jnt_stiffness[i+1];
+        };
+
+        auto SetJointStiffness = [this](int i, double VarStiff) 
+        {
+          model->jnt_stiffness[i+1] = VarStiff;
+        };
+
+        // Create a matrix softIndices with alle the indices of phalanges joints
+        int NUMBER_SOFT_JOINTS = 10;
+        int softIndices[2][NUMBER_SOFT_JOINTS];
+        const std::vector<std::string> prefix_softIndices = {"R", "L"};
+
+        for(int k = 0; k < mj_jnt_names.size(); ++k)
+        {      
+          for(int i = 0; i < 2; ++ i)
+          {
+            for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
+            {
+              std::string phalanx_name = "hrp4j_soft_"+prefix_softIndices[i]+"_PHALANX_"+std::to_string(j);
+              // std::cout << "  phalanx_name:   " << phalanx_name;
+              if(mj_jnt_names[k] == phalanx_name)
+              {
+                softIndices[i][j-1] = mj_jnt_ids[k];
+              }
+            }
+          }
+        }
+
+        // Create a matrix varIndices with alle the indices of variable stiffness joint
+        int NUMBER_VAR_JOINTS = 2;
+        int VarStiffIndices[1][NUMBER_VAR_JOINTS];
+        const std::vector<std::string> prefix_VarStiffIndices = {"R", "L"};
+
+        for(int k = 0; k < mj_jnt_names.size(); ++k)
+        {      
+          for(int j = 0; j < NUMBER_VAR_JOINTS; ++j)
+          {
+            std::string varStiff_name = "hrp4j_soft_"+prefix_VarStiffIndices[j]+"_VARSTIFF";
+            // std::cout << "  varStiff_name:   " << varStiff_name;
+            if(mj_jnt_names[k] == varStiff_name)
+            {
+              VarStiffIndices[1][j] = mj_jnt_ids[k];
+              // std::cout << "  mj_jnt_ids[k]:   " << mj_jnt_ids[k];
+            }
+          }
+        }
+
+        double var_jnt_value = qpos(VarStiffIndices[1][1]);
+        // std::cout << "  var_jnt_value:   " << var_jnt_value;  
+
+        for(int k = 0; k < mj_jnt_names.size(); ++k)
+        {
+          double springSoft = stiffness_low + (qpos(k) - angle_low)*(stiffness_high-stiffness_low)/(angle_high-angle_low);
+          for(int i = 0; i < 2; ++ i)
+          {
+            for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
+            {
+              SetJointStiffness(softIndices[i][j-1], springSoft);
+              // std::cout << "  phalanges_stiffness:   " << model->jnt_stiffness[k+1]; 
+            }
+          }
+        }
+      }
+
+
+
+
     }
+
   }
+
   // On each control iter
   for(auto & r : robots)
   {
