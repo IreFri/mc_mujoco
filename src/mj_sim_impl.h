@@ -103,6 +103,8 @@ struct MjRobot
   std::vector<int> mj_jnt_ids;
   /** MuJoCo joint to rjo index */
   std::vector<int> mj_jnt_to_rjo;
+  /** MuJoCo joint to passive joints index ***Irene*** */
+  std::vector<int> mj_jnt_to_passive;
   /** MuJoCo motor to rjo index */
   std::vector<int> mj_mot_to_rjo;
   /** Correspondance from mc_rtc force sensor's name to MuJoCo force sensor id, -1 if absent */
