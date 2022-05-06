@@ -289,10 +289,33 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
   const auto & mbc = robot.mbc();
   const auto & rjo = robot.module().ref_joint_order();
 
+  // Create passive joints vector name
+
+  const rbd::MultiBody & multiBody = robot.mb(); // MultiBody object
+  const std::vector<rbd::Joint> & joints = multiBody.joints();
+  std::vector<std::string> totJoints;
+  for (int i = 0; i < joints.size(); i++)
+  {
+    const std::string & jointName = joints[i].name(); // All joints name
+    totJoints.push_back(jointName);
+    // std::cout << "  joint_name:   " << jointName << std::endl; 
+  }
+  for (int i = 0; i < rjo.size(); i++)
+  {
+    const std::string & ActivejointName = rjo[i];
+    // std::cout << "  active_joint_name:   " << ActivejointName << std::endl;
+  }
+
+  for (int i = 0; i < mj_jnt_names.size(); i++)
+  {
+    // std::cout << "  mj_jnt_names:   " << mj_jnt_names[i] << std::endl;
+  }
+
   mj_to_mbc.resize(0);
   mj_prev_ctrl_q.resize(0);
   mj_prev_ctrl_alpha.resize(0);
   mj_jnt_to_rjo.resize(0);
+  mj_jnt_to_passive.resize(0);
   encoders = std::vector<double>(rjo.size(), 0.0);
   alphas = std::vector<double>(rjo.size(), 0.0);
   torques = std::vector<double>(rjo.size(), 0.0);
@@ -305,13 +328,22 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
       }
       return mj_jn;
     }();
+
     auto rjo_it = std::find(rjo.begin(), rjo.end(), jn);
+    auto passive_it = std::find(totJoints.begin(), totJoints.end(), jn);
     int rjo_idx = -1;
+    int passive_idx = -1;
     if(rjo_it != rjo.end())
     {
       rjo_idx = std::distance(rjo.begin(), rjo_it);
     }
+    else
+    {
+      passive_idx = std::distance(totJoints.begin(), passive_it);
+    }
     mj_jnt_to_rjo.push_back(rjo_idx);
+    mj_jnt_to_passive.push_back(passive_idx);
+
     const auto motor = std::string(robot.name()+"_"+jn+"_motor");
     auto it = std::find(mj_mot_names.begin(), mj_mot_names.end(), motor);
     if(robot.hasJoint(jn) && it != mj_mot_names.end())
@@ -339,9 +371,15 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
     }
   }
 
+  for(int i = 0; i < mj_jnt_to_passive.size(); i++)
+  {
+    // std::cout << "  mj_jnt_to_passive:   " << mj_jnt_to_passive[i] << std::endl;
+  }
+
   mj_ctrl = mj_prev_ctrl_q;
   mj_next_ctrl_q = mj_prev_ctrl_q;
   mj_next_ctrl_alpha = mj_prev_ctrl_alpha;
+   
 }
 
 void MjSimImpl::setSimulationInitialState()
@@ -487,6 +525,17 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
     encoders[mj_jnt_to_rjo[i]] = data->qpos[model->jnt_qposadr[mj_jnt_ids[i]]];
     alphas[mj_jnt_to_rjo[i]] = data->qvel[model->jnt_dofadr[mj_jnt_ids[i]]];
   }
+
+  for(size_t i = 0; i < mj_jnt_ids.size(); ++i)
+  {
+    if(mj_jnt_to_passive[i] == -1)
+    {
+      continue;
+    }
+    gc->realRobot(name).mbc().q[mj_jnt_to_passive[i]][0]= data->qpos[model->jnt_qposadr[mj_jnt_ids[i]]];
+  }
+
+
   for(size_t i = 0; i < mj_mot_ids.size(); ++i)
   {
     if(mj_jnt_to_rjo[i] == -1)
@@ -557,13 +606,14 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
     ranges_ptr[rs.first]->update(rs.second);
   }
 
-
-
-
   // Joint sensor updates
   gc->setEncoderValues(name, encoders);
   gc->setEncoderVelocities(name, alphas);
   gc->setJointTorques(name, torques);
+
+
+  // Update frontal arc and phalanges pose (update passive joints)
+
 }
 
 void MjSimImpl::updateData()
@@ -647,8 +697,10 @@ bool MjSimImpl::controlStep()
 
 
       // Update variable stiffness
+
+      bool VARIABLE_STIFFNESS_ACTIVE = false;
       
-      if(r.name == "hrp4j_soft")
+      if(r.name == "hrp4j_soft" && VARIABLE_STIFFNESS_ACTIVE)
       {   
         const auto & mj_jnt_names = r.mj_jnt_names;
         const auto & mj_jnt_ids = r.mj_jnt_ids;
@@ -679,6 +731,7 @@ bool MjSimImpl::controlStep()
         };
 
         // Create a matrix softIndices with alle the indices of phalanges joints
+
         int NUMBER_SOFT_JOINTS = 10;
         int softIndices[2][NUMBER_SOFT_JOINTS];
         const std::vector<std::string> prefix_softIndices = {"R", "L"};
@@ -734,6 +787,8 @@ bool MjSimImpl::controlStep()
           }
         }
       }
+
+
 
 
 
