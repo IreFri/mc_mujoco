@@ -56,6 +56,8 @@ public:
    */
   mc_control::MCGlobalController * controller() noexcept;
 
+  const MjConfiguration & config() const;
+
 private:
   std::unique_ptr<MjSimImpl> impl;
 };

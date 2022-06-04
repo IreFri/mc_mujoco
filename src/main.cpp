@@ -17,7 +17,10 @@ void simulate(mc_mujoco::MjSim & mj_sim)
   bool done = false;
   while(!done && render_state)
   {
-    mj_sim.stepSimulation();
+    if(!mj_sim.config().recording)
+    {
+      mj_sim.stepSimulation();
+    }
   }
 }
 
@@ -40,6 +43,7 @@ int main(int argc, char * argv[])
       ("help", "Show this help message")
       ("mc-config", po::value<std::string>(&config.mc_config), "Configuration given to mc_rtc")
       ("step-by-step", po::bool_switch(&config.step_by_step), "Start the simulation in step-by-step mode")
+      ("recording", po::bool_switch(&config.recording), "Record the simulation from the start")
       ("without-controller", po::bool_switch(), "Disable mc_rtc controller inside mc_mujoco")
       ("without-visualization", po::bool_switch(), "Disable mc_mujoco GUI")
       ("without-mc-rtc-gui", po::bool_switch(), "Disable mc_rtc GUI")
@@ -69,10 +73,15 @@ int main(int argc, char * argv[])
   }
   mc_mujoco::MjSim mj_sim(config);
 
-  std::thread simThread(simulate, std::ref(mj_sim));
+  std::thread simThread;
+  simThread = std::thread(simulate, std::ref(mj_sim));
 
   while(render_state)
   {
+    if(mj_sim.config().recording)
+    {
+      mj_sim.stepSimulation();
+    }
     mj_sim.updateScene();
     render_state = mj_sim.render();
   }

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <chrono>
 #include <type_traits>
+#include <iomanip>
 
 #include "MujocoClient.h"
 #include "config.h"
@@ -22,6 +23,9 @@ namespace bfs = boost::filesystem;
 
 #include <mc_rtc/version.h>
 
+#define STBI_MSC_SECURE_CRT
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 namespace mc_mujoco
 {
@@ -253,6 +257,11 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
                    mc_bs_to_mj_accelerometer_id);
   }
 
+
+
+
+  //****************************************************Start: Range Sensors******************************************************
+
   // get of range sensors
   auto getRangeSensors = [] (mc_rbdyn::Robot & robot) -> std::vector<mc_mujoco::RangeSensor *>
   {
@@ -281,6 +290,8 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
     init_sensor_id("range sensor", "range sensor", rs->name(), "ranger", mjSENS_RANGEFINDER, mc_rs_to_mj_ranger_id);
   }
 
+  //****************************************************End: Range Sensors******************************************************
+
   reset(robot);
 }
 
@@ -288,6 +299,10 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
 {
   const auto & mbc = robot.mbc();
   const auto & rjo = robot.module().ref_joint_order();
+
+
+
+  //****************************************************Start: Passive Joints******************************************************
 
   // Create passive joints vector name
 
@@ -311,6 +326,8 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
     // std::cout << "  mj_jnt_names:   " << mj_jnt_names[i] << std::endl;
   }
 
+  //****************************************************End: Passive Joints******************************************************
+
   mj_to_mbc.resize(0);
   mj_prev_ctrl_q.resize(0);
   mj_prev_ctrl_alpha.resize(0);
@@ -329,10 +346,11 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
       return mj_jn;
     }();
 
+//****************************************************Lines  relative to passive joints******************************************************
     auto rjo_it = std::find(rjo.begin(), rjo.end(), jn);
-    auto passive_it = std::find(totJoints.begin(), totJoints.end(), jn);
+    auto passive_it = std::find(totJoints.begin(), totJoints.end(), jn); //*
     int rjo_idx = -1;
-    int passive_idx = -1;
+    int passive_idx = -1; //*
     if(rjo_it != rjo.end())
     {
       rjo_idx = std::distance(rjo.begin(), rjo_it);
@@ -342,14 +360,14 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
       passive_idx = std::distance(totJoints.begin(), passive_it);
     }
     mj_jnt_to_rjo.push_back(rjo_idx);
-    mj_jnt_to_passive.push_back(passive_idx);
+    mj_jnt_to_passive.push_back(passive_idx); //*
 
-    const auto motor = std::string(robot.name()+"_"+jn+"_motor");
-    auto it = std::find(mj_mot_names.begin(), mj_mot_names.end(), motor);
-    if(robot.hasJoint(jn) && it != mj_mot_names.end())
+    const auto motor = std::string(robot.name()+"_"+jn+"_motor"); //*
+    auto it = std::find(mj_mot_names.begin(), mj_mot_names.end(), motor); //*
+    if(robot.hasJoint(jn) && it != mj_mot_names.end()) //*
     {
       auto jIndex = robot.jointIndexByName(jn);
-      mj_mot_to_rjo.push_back(rjo_idx);
+      mj_mot_to_rjo.push_back(rjo_idx); //*
       mj_to_mbc.push_back(jIndex);
       if(robot.mb().joint(jIndex).dof() != 1)
       {
@@ -366,14 +384,9 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
     }
     else
     {
-      mj_mot_to_rjo.push_back(-1);
+      mj_mot_to_rjo.push_back(-1); //*
       mj_to_mbc.push_back(-1);
     }
-  }
-
-  for(int i = 0; i < mj_jnt_to_passive.size(); i++)
-  {
-    // std::cout << "  mj_jnt_to_passive:   " << mj_jnt_to_passive[i] << std::endl;
   }
 
   mj_ctrl = mj_prev_ctrl_q;
@@ -381,6 +394,8 @@ void MjRobot::reset(const mc_rbdyn::Robot & robot)
   mj_next_ctrl_alpha = mj_prev_ctrl_alpha;
    
 }
+
+//****************************************************End: Lines relative to passive joints******************************************************
 
 void MjSimImpl::setSimulationInitialState()
 {
@@ -392,10 +407,10 @@ void MjSimImpl::setSimulationInitialState()
     {
       const auto & robot = controller->robots().robot(r.name);
       r.initialize(model, robot);
-      for(const auto & rs : r.ranges_ptr)
-      {
-        rs.second->addToLogger(controller->controller().logger(), robot.name());
-      }
+      for(const auto & rs : r.ranges_ptr) //*
+      { //*
+        rs.second->addToLogger(controller->controller().logger(), robot.name()); //*
+      } //*
       if(r.root_joint.size())
       {
         r.root_qpos_idx = qInit.size();
@@ -464,54 +479,71 @@ void MjSimImpl::startSimulation()
     controller->setEncoderValues(r.name, r.encoders);
   }
   controller->init(robots[0].encoders);
+
   controller->running = true;
 
-  auto qpos = [this](int i) -> double
-  {
-    return data->qpos[i+7];
-  };
+//****************************************************Start: Passive forces components******************************************************
 
-  auto qpos_spring = [this](int i) -> double
-  {
-    return model->qpos_spring[i+7];
-  };
+  // auto qpos = [this](int i) -> double
+  // {
+  //   return data->qpos[i+7];
+  // };
 
-  auto qvel = [this](int i) -> double
-  {
-    return data->qvel[i+6];
-  };
+  // auto qpos_spring = [this](int i) -> double
+  // {
+  //   return model->qpos_spring[i+7];
+  // };
 
-  auto qfrc_passive = [this](int i) -> double
-  {
-    return data->qfrc_passive[i+6];
-  };
+  // auto qvel = [this](int i) -> double
+  // {
+  //   return data->qvel[i+6];
+  // };
 
-  auto damping = [this](int i) -> double
-  {
-    return model->dof_damping[i+6];
-  };
+  // auto qfrc_passive = [this](int i) -> double
+  // {
+  //   return data->qfrc_passive[i+6];
+  // };
 
-  auto stiffness = [this](int i) -> double
-  {
-    return model->jnt_stiffness[i+1];
-  };
+  // auto damping = [this](int i) -> double
+  // {
+  //   return model->dof_damping[i+6];
+  // };
 
-  const auto & mj_jnt_names = robots[0].mj_jnt_names;
-  for(int i = 0; i < mj_jnt_names.size(); ++i)
-  {
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_stiffness", this, [stiffness, i]() { return stiffness(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_damping", this, [damping, i]() { return damping(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos", this, [qpos, i]() { return qpos(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qvel", this, [qvel, i]() { return qvel(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qfrc_passive", this, [qfrc_passive, i]() { return qfrc_passive(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos_spring", this, [qpos_spring, i]() { return qpos_spring(i); });
+  // auto stiffness = [this](int i) -> double
+  // {
+  //   return model->jnt_stiffness[i+1];
+  // };
 
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_stiffness", this, [qpos, stiffness, i]() { return -stiffness(i) * qpos(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_damping", this, [qvel, damping, i]() { return -damping(i) * qvel(i); });
-    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive", this, [qpos, stiffness, qvel, damping, i]() { return -stiffness(i) * qpos(i) -damping(i) * qvel(i); });
-    // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
-    //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
-  }
+  // const auto & mj_jnt_names = robots[0].mj_jnt_names;
+  // for(int i = 0; i < mj_jnt_names.size(); ++i)
+  // {
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_stiffness", this, [stiffness, i]() { return stiffness(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_damping", this, [damping, i]() { return damping(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos", this, [qpos, i]() { return qpos(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qvel", this, [qvel, i]() { return qvel(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qfrc_passive", this, [qfrc_passive, i]() { return qfrc_passive(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos_spring", this, [qpos_spring, i]() { return qpos_spring(i); });
+
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_stiffness", this, [qpos, stiffness, i]() { return -stiffness(i) * qpos(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_damping", this, [qvel, damping, i]() { return -damping(i) * qvel(i); });
+  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive", this, [qpos, stiffness, qvel, damping, i]() { return -stiffness(i) * qpos(i) -damping(i) * qvel(i); });
+  //   // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
+  //   //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
+  // }
+
+  // auto stiffnessToAngle = [this](double VarStiff) 
+  // {
+  //   double angle_low = 0;
+  //   double angle_high = 1;
+  //   double stiffness_low = 0;
+  //   double stiffness_high = 100;
+  //   return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+  // };
+//   controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(controller->robot().jointIndexByName("R_VARSTIFF")));
+//   controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(controller->robot().jointIndexByName("L_VARSTIFF")));
+
+//****************************************************End: Passive force components******************************************************
+
 }
 
 void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model, mjData * data)
@@ -526,14 +558,14 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
     alphas[mj_jnt_to_rjo[i]] = data->qvel[model->jnt_dofadr[mj_jnt_ids[i]]];
   }
 
-  for(size_t i = 0; i < mj_jnt_ids.size(); ++i)
-  {
-    if(mj_jnt_to_passive[i] == -1)
-    {
-      continue;
-    }
-    gc->realRobot(name).mbc().q[mj_jnt_to_passive[i]][0]= data->qpos[model->jnt_qposadr[mj_jnt_ids[i]]];
-  }
+  for(size_t i = 0; i < mj_jnt_ids.size(); ++i) //*
+  { //*
+    if(mj_jnt_to_passive[i] == -1) //*
+    { //*
+      continue; //*
+    } //* 
+    gc->realRobot(name).mbc().q[mj_jnt_to_passive[i]][0]= data->qpos[model->jnt_qposadr[mj_jnt_ids[i]]]; //*
+  } //*
 
 
   for(size_t i = 0; i < mj_mot_ids.size(); ++i)
@@ -599,6 +631,7 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
   }
   gc->setWrenches(name, wrenches);
 
+//****************************************************Start: Range Sensors******************************************************
   // Range sensor update
   for(auto & rs : ranges)
   {
@@ -606,13 +639,12 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
     ranges_ptr[rs.first]->update(rs.second);
   }
 
+//****************************************************End: Range Sensors******************************************************
+
   // Joint sensor updates
   gc->setEncoderValues(name, encoders);
   gc->setEncoderVelocities(name, alphas);
   gc->setJointTorques(name, torques);
-
-
-  // Update frontal arc and phalanges pose (update passive joints)
 
 }
 
@@ -648,10 +680,10 @@ void MjRobot::sendControl(const mjModel & model, mjData & data, size_t interp_id
   {
     auto mot_id = mj_mot_ids[j];
     auto rjo_id = mj_mot_to_rjo[j];
-    if(rjo_id == - 1)
-    {
-      continue;
-    }
+    if(rjo_id == - 1) 
+    { 
+      continue; 
+    } 
     auto pos_act_id = mj_pos_act_ids[i];
     auto vel_act_id = mj_vel_act_ids[i];
     // compute desired q using interpolation
@@ -696,7 +728,7 @@ bool MjSimImpl::controlStep()
 
 
 
-      // Update variable stiffness
+// **********************************************Start: Update variable stiffness**********************************************************
 
       bool VARIABLE_STIFFNESS_ACTIVE = false;
       
@@ -791,7 +823,7 @@ bool MjSimImpl::controlStep()
 
 
 
-
+// **********************************************End: Update variable stiffness**********************************************************
 
     }
 
@@ -855,6 +887,7 @@ bool MjSimImpl::stepSimulation()
   }
   auto start_step = clock::now();
   // Only run the GUI update if the simulation is paused
+
   if(config.step_by_step && rem_steps == 0)
   {
     if(controller)
@@ -903,12 +936,15 @@ void MjSimImpl::updateScene()
 {
   // update scene and render
   std::lock_guard<std::mutex> lock(rendering_mutex_);
+
   mjv_updateScene(model, data, &options, &pert, &camera, mjCAT_ALL, &scene);
 
-  if(client)
-  {
-    client->updateScene(scene);
-  }
+  // If you do not want to record geometries elements, you have to let this comment.
+  // You should push on git.
+  // if(client)
+  // {
+  //   client->updateScene(scene);
+  // }
 
   // process pending GUI events, call GLFW callbacks
   glfwPollEvents();
@@ -924,6 +960,20 @@ bool MjSimImpl::render()
   // mj render
   mjr_render(uistate.rect[0], &scene, &context);
 
+  // @@@@@@@@@@@@@Here only the robot and the steps on the ground are displayed
+  // call this to record the video
+  // record();
+
+  // This is called here to display some elements as markers and to do not record them
+  // If you do not want them you have to comment those lines
+  // --> From here
+  if(client)
+  {
+    client->updateScene(scene);
+  }
+  mjr_render(uistate.rect[0], &scene, &context);
+  // --> Until here
+
   // Render ImGui
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -937,6 +987,8 @@ bool MjSimImpl::render()
     client->update();
     client->draw2D(window);
     client->draw3D();
+    // @@@@@@@@@@@@@@Here the robot, and geometries elements
+    record();
   }
   {
     auto right_margin = 5.0f;
@@ -981,6 +1033,7 @@ bool MjSimImpl::render()
       doNStepsButton(50, false);
       doNStepsButton(100, true);
     }
+    ImGui::Checkbox("Record", &config.recording);
     auto flag_to_gui = [&](const char * label, mjtVisFlag flag) {
       bool show = options.flags[flag];
       if(ImGui::Checkbox(label, &show))
@@ -1016,6 +1069,9 @@ bool MjSimImpl::render()
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+  // @@@@@@@@@@@@@@@@@@@Here everything is displayed
+  // record();
+  
   // swap OpenGL buffers (blocking call due to v-sync)
   glfwSwapBuffers(window);
 
@@ -1056,6 +1112,37 @@ void MjSimImpl::saveGUISettings()
   mc_rtc::log::success("[mc_mujoco] Configuration saved to {}", path_out);
 }
 
+void MjSimImpl::record()
+{
+  // save frames for video
+  if(config.recording && !config.step_by_step && ((data->time - frametime_) > 1.0 / 30.0 || frametime_== 0 ))
+  {
+    mjrRect viewport =  mjr_maxViewport(&context);
+    int W = viewport.width;
+    int H = viewport.height;
+
+    // allocate rgb and depth buffers
+    unsigned char* rgb = (unsigned char*)malloc(3*W*H);
+    float* depth = (float*)malloc(sizeof(float)*W*H);
+    if( !rgb || !depth )
+    {
+      mju_error("Could not allocate buffers");
+    }
+
+    mjr_readPixels(rgb, depth, viewport, &context);
+
+    stbi_flip_vertically_on_write(true);
+    std::stringstream filename;
+    filename << "record_" <<  std::setfill('0') << std::setw(5) << framecount_ ++ << ".png"; 
+    stbi_write_png(filename.str().c_str(), W, H, 3, rgb, 3*W);
+    // std::cout << data->time - frametime_ << " " << 1.0 / 60.0 << std::endl;
+    frametime_ = data->time;
+
+    free(rgb);
+    free(depth);
+  }
+}
+
 MjSim::MjSim(const MjConfiguration & config) : impl(new MjSimImpl(config))
 {
   impl->startSimulation();
@@ -1090,6 +1177,11 @@ void MjSim::resetSimulation(const std::map<std::string, std::vector<double>> & r
 bool MjSim::render()
 {
   return impl->render();
+}
+
+const MjConfiguration & MjSim::config() const
+{
+  return impl->config;
 }
 
 mc_control::MCGlobalController * MjSim::controller() noexcept
