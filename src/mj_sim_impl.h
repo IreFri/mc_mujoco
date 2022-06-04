@@ -277,6 +277,11 @@ private:
   /** Mutex used in rendering */
   std::mutex rendering_mutex_;
 
+  /** Last frame time when the image where saved */
+  double frametime_ = 0.0;
+  /** Counter of saved images */
+  int framecount_ = 0;
+
 public:
   MjSimImpl(const MjConfiguration & config);
 
@@ -314,6 +319,7 @@ public:
 
   std::map<std::string, std::vector<double>> init_qs_;
   std::map<std::string, sva::PTransformd> init_pos_;
+  void record();
 };
 
 } // namespace mc_mujoco

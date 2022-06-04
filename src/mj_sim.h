@@ -63,6 +63,7 @@ public:
 
   /** Return the MuJoCo data */
   mjData & data() noexcept;
+  const MjConfiguration & config() const;
 
 private:
   std::unique_ptr<MjSimImpl> impl;

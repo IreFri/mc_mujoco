@@ -23,6 +23,8 @@ struct MjConfiguration
   bool sync_real_time = false;
   /** If true, start in step-by-step mode */
   bool step_by_step = false;
+  /** If true, start in recording mode */
+  bool recording = false;
   /** mc_rtc configuration file */
   std::string mc_config = "";
   /** Use torque-control rather than position control */
