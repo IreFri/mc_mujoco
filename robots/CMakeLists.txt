@@ -5,6 +5,12 @@ endif()
 set(HFIELD "castle_wall_1000" CACHE STRING "Define the hfield")
 set(HFIELD_PATH "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD}.png")
 
+set(HFIELD_PATH1 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD1}.png")
+set(HFIELD_PATH2 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD2}.png")
+set(HFIELD_PATH3 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD3}.png")
+set(HFIELD_PATH4 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD4}.png")
+set(HFIELD_PATH5 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD5}.png")
+
 add_subdirectory(jvrc_mj_description)
 add_subdirectory(hrp4cr_mj_description)
 add_subdirectory(hrp4j_mj_description)
