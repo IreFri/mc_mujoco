@@ -30,6 +30,10 @@ namespace bfs = boost::filesystem;
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+// IF YOU DO NOT SET THIS TO TRUE IT WILL NOT USE THE VARIABLE STIFFNESS
+bool VARIABLE_STIFFNESS_ACTIVE = true;
+
+
 namespace mc_mujoco
 {
 
@@ -656,6 +660,80 @@ void MjSimImpl::makeDatastoreCalls()
 
 void MjSimImpl::startSimulation()
 {
+  //****************************************************Start: Passive forces components******************************************************
+
+  auto qpos = [this](int i) -> double
+  {
+    return data->qpos[i+7];
+  };
+
+  auto qpos_spring = [this](int i) -> double
+  {
+    return model->qpos_spring[i+7];
+  };
+
+  auto qvel = [this](int i) -> double
+  {
+    return data->qvel[i+6];
+  };
+
+  auto qfrc_passive = [this](int i) -> double
+  {
+    return data->qfrc_passive[i+6];
+  };
+
+  auto damping = [this](int i) -> double
+  {
+    return model->dof_damping[i+6];
+  };
+
+  auto stiffness = [this](int i) -> double
+  {
+    return model->jnt_stiffness[i+1];
+  };
+
+  const auto & mj_jnt_names = robots[0].mj_jnt_names;
+  for(int i = 0; i < mj_jnt_names.size(); ++i)
+  {
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_stiffness", this, [stiffness, i]() { return stiffness(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_damping", this, [damping, i]() { return damping(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos", this, [qpos, i]() { return qpos(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qvel", this, [qvel, i]() { return qvel(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qfrc_passive", this, [qfrc_passive, i]() { return qfrc_passive(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos_spring", this, [qpos_spring, i]() { return qpos_spring(i); });
+
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_stiffness", this, [qpos, stiffness, i]() { return -stiffness(i) * qpos(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_damping", this, [qvel, damping, i]() { return -damping(i) * qvel(i); });
+    controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive", this, [qpos, stiffness, qvel, damping, i]() { return -stiffness(i) * qpos(i) -damping(i) * qvel(i); });
+    // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
+    //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
+  }
+
+  auto stiffnessToAngle = [this](double VarStiff) 
+  {
+    double angle_low = 0;
+    double angle_high = 1;
+    double stiffness_low = 0;
+    double stiffness_high = 100;
+    return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+  };
+
+  int idx_phalanx = 0;
+  for(int k = 0; k < mj_jnt_names.size(); ++k)
+  {      
+    if(mj_jnt_names[k] == "hrp4j_soft_R_PHALANX_10")
+    {
+      idx_phalanx = k;
+      break;
+    }
+  }
+  
+  controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+  controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+
+  //****************************************************End: Passive force components******************************************************
+
+  setSimulationInitialState();
   if(!config.with_controller)
   {
     setSimulationInitialState();
@@ -684,68 +762,6 @@ void MjSimImpl::startSimulation()
   controller->init(init_qs_, init_pos_);
   controller->running = true;
   setSimulationInitialState();
-
-//****************************************************Start: Passive forces components******************************************************
-
-  // auto qpos = [this](int i) -> double
-  // {
-  //   return data->qpos[i+7];
-  // };
-
-  // auto qpos_spring = [this](int i) -> double
-  // {
-  //   return model->qpos_spring[i+7];
-  // };
-
-  // auto qvel = [this](int i) -> double
-  // {
-  //   return data->qvel[i+6];
-  // };
-
-  // auto qfrc_passive = [this](int i) -> double
-  // {
-  //   return data->qfrc_passive[i+6];
-  // };
-
-  // auto damping = [this](int i) -> double
-  // {
-  //   return model->dof_damping[i+6];
-  // };
-
-  // auto stiffness = [this](int i) -> double
-  // {
-  //   return model->jnt_stiffness[i+1];
-  // };
-
-  // const auto & mj_jnt_names = robots[0].mj_jnt_names;
-  // for(int i = 0; i < mj_jnt_names.size(); ++i)
-  // {
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_stiffness", this, [stiffness, i]() { return stiffness(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_damping", this, [damping, i]() { return damping(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos", this, [qpos, i]() { return qpos(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qvel", this, [qvel, i]() { return qvel(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qfrc_passive", this, [qfrc_passive, i]() { return qfrc_passive(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_qpos_spring", this, [qpos_spring, i]() { return qpos_spring(i); });
-
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_stiffness", this, [qpos, stiffness, i]() { return -stiffness(i) * qpos(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive_damping", this, [qvel, damping, i]() { return -damping(i) * qvel(i); });
-  //   controller->controller().logger().addLogEntry(mj_jnt_names[i]+"_own_qfrc_passive", this, [qpos, stiffness, qvel, damping, i]() { return -stiffness(i) * qpos(i) -damping(i) * qvel(i); });
-  //   // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t damping {:4f} \t qpos {:.6f} \t qvel {:.6f} \t passive {:.6f}",
-  //   //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
-  // }
-
-  // auto stiffnessToAngle = [this](double VarStiff) 
-  // {
-  //   double angle_low = 0;
-  //   double angle_high = 1;
-  //   double stiffness_low = 0;
-  //   double stiffness_high = 100;
-  //   return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
-  // };
-//   controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(controller->robot().jointIndexByName("R_VARSTIFF")));
-//   controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(controller->robot().jointIndexByName("L_VARSTIFF")));
-
-//****************************************************End: Passive force components******************************************************
 
 }
 
@@ -946,10 +962,7 @@ bool MjSimImpl::controlStep()
 
 
 
-// **********************************************Start: Update variable stiffness**********************************************************
-
-      bool VARIABLE_STIFFNESS_ACTIVE = false;
-      
+// **********************************************Start: Update variable stiffness**********************************************************      
       if(r.name == "hrp4j_soft" && VARIABLE_STIFFNESS_ACTIVE)
       {   
         const auto & mj_jnt_names = r.mj_jnt_names;
@@ -981,59 +994,44 @@ bool MjSimImpl::controlStep()
         };
 
         // Create a matrix softIndices with alle the indices of phalanges joints
-
         int NUMBER_SOFT_JOINTS = 10;
         int softIndices[2][NUMBER_SOFT_JOINTS];
-        const std::vector<std::string> prefix_softIndices = {"R", "L"};
+        // Create a matrix varIndices with alle the indices of variable stiffness joint
+        int NUMBER_VAR_JOINTS = 2;
+        int VarStiffIndices[NUMBER_VAR_JOINTS];
+        const std::vector<std::string> prefix = {"R", "L"};
 
         for(int k = 0; k < mj_jnt_names.size(); ++k)
         {      
-          for(int i = 0; i < 2; ++ i)
+          for(int i = 0; i < NUMBER_VAR_JOINTS; ++ i)
           {
-            for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
+            std::string varStiff_name = "hrp4j_soft_"+prefix[i]+"_VARSTIFF";
+            if(mj_jnt_names[k] == varStiff_name)
             {
-              std::string phalanx_name = "hrp4j_soft_"+prefix_softIndices[i]+"_PHALANX_"+std::to_string(j);
-              // std::cout << "  phalanx_name:   " << phalanx_name;
-              if(mj_jnt_names[k] == phalanx_name)
+              VarStiffIndices[i] = mj_jnt_ids[k]-1;
+            }
+            else
+            {
+              for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
               {
-                softIndices[i][j-1] = mj_jnt_ids[k];
+                std::string phalanx_name = "hrp4j_soft_"+prefix[i]+"_PHALANX_"+std::to_string(j);
+                if(mj_jnt_names[k] == phalanx_name)
+                {
+                  softIndices[i][j-1] = mj_jnt_ids[k]-1;
+                }
               }
             }
           }
+          // mc_rtc::log::warning("ID {}  \t name {} \t stiffness {:4f}\t qpos {:.6f}", k, mj_jnt_names[k], stiffness(k), qpos(k)); 
         }
 
-        // Create a matrix varIndices with alle the indices of variable stiffness joint
-        int NUMBER_VAR_JOINTS = 2;
-        int VarStiffIndices[1][NUMBER_VAR_JOINTS];
-        const std::vector<std::string> prefix_VarStiffIndices = {"R", "L"};
-
-        for(int k = 0; k < mj_jnt_names.size(); ++k)
-        {      
-          for(int j = 0; j < NUMBER_VAR_JOINTS; ++j)
-          {
-            std::string varStiff_name = "hrp4j_soft_"+prefix_VarStiffIndices[j]+"_VARSTIFF";
-            // std::cout << "  varStiff_name:   " << varStiff_name;
-            if(mj_jnt_names[k] == varStiff_name)
-            {
-              VarStiffIndices[1][j] = mj_jnt_ids[k];
-              // std::cout << "  mj_jnt_ids[k]:   " << mj_jnt_ids[k];
-            }
-          }
-        }
-
-        double var_jnt_value = qpos(VarStiffIndices[1][1]);
-        // std::cout << "  var_jnt_value:   " << var_jnt_value;  
-
-        for(int k = 0; k < mj_jnt_names.size(); ++k)
+        // Update the stiffness of the phalanxes
+        for(int i = 0; i < NUMBER_VAR_JOINTS; ++ i)
         {
-          double springSoft = stiffness_low + (qpos(k) - angle_low)*(stiffness_high-stiffness_low)/(angle_high-angle_low);
-          for(int i = 0; i < 2; ++ i)
+          double springSoft = stiffness_low + (qpos(VarStiffIndices[i]) - angle_low)*(stiffness_high-stiffness_low)/(angle_high-angle_low);
+          for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
           {
-            for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
-            {
-              SetJointStiffness(softIndices[i][j-1], springSoft);
-              // std::cout << "  phalanges_stiffness:   " << model->jnt_stiffness[k+1]; 
-            }
+            SetJointStiffness(softIndices[i][j-1], springSoft);
           }
         }
       }
