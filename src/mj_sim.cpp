@@ -1138,11 +1138,11 @@ bool MjSimImpl::render()
   // This is called here to display some elements as markers and to do not record them
   // If you do not want them you have to comment those lines
   // --> From here
-  if(client)
-  {
-    client->updateScene(scene);
-  }
-  mjr_render(uistate.rect[0], &scene, &context);
+  // if(client)
+  // {
+  //   client->updateScene(scene);
+  // }
+  // mjr_render(uistate.rect[0], &scene, &context);
   // --> Until here
 
   // Render ImGui
@@ -1156,10 +1156,14 @@ bool MjSimImpl::render()
   if(client)
   {
     client->update();
-    client->draw2D(window);
-    client->draw3D();
     // @@@@@@@@@@@@@@Here the robot, and geometries elements
-    record();
+    client->draw2D(window);
+    // ***************Start: Lines to uncomment to have GUI of the plot (and write --recording)***************************
+    // ImGui::Render();
+    // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    // record();
+    // ***************End: Lines to uncomment to have GUI of the plot***************************
+    // client->draw3D();
   }
   {
     auto right_margin = 5.0f;
@@ -1247,7 +1251,7 @@ bool MjSimImpl::render()
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
   // @@@@@@@@@@@@@@@@@@@Here everything is displayed
-  // record();
+  record();
   
   // swap OpenGL buffers (blocking call due to v-sync)
   glfwSwapBuffers(window);
