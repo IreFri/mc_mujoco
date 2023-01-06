@@ -657,6 +657,10 @@ void MjSimImpl::startSimulation()
     //   i, mj_jnt_names[i], stiffness(i), damping(i), qpos(i), qvel(i), qfrc_passive(i)); 
   }
 
+  //****************************************************End: Passive force components******************************************************
+
+  //****************************************************Start: Variable Stiffness components******************************************************
+
   auto stiffnessToAngle = [this](double VarStiff) 
   {
     double angle_low = 0;
@@ -679,7 +683,7 @@ void MjSimImpl::startSimulation()
   controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
   controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
 
-  //****************************************************End: Passive force components******************************************************
+  //****************************************************End: Variable Stiffness components******************************************************
 
   setSimulationInitialState();
   if(!config.with_controller)
