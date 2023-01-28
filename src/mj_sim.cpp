@@ -680,8 +680,11 @@ void MjSimImpl::startSimulation()
     }
   }
   
-  controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
-  controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+  if(controller->robot().hasJoint("R_VARSTIFF"))
+  {
+    controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+    controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+  }
 
   //****************************************************End: Variable Stiffness components******************************************************
 
@@ -1116,10 +1119,10 @@ void MjSimImpl::updateScene()
 
   // If you do not want to record geometries elements, you have to let this comment.
   // You should push on git.
-  // if(client)
-  // {
-  //   client->updateScene(scene);
-  // }
+  if(client)
+  {
+    client->updateScene(scene);
+  }
 
   // process pending GUI events, call GLFW callbacks
   glfwPollEvents();
@@ -1167,7 +1170,7 @@ bool MjSimImpl::render()
     // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     // record();
     // ***************End: Lines to uncomment to have GUI of the plot***************************
-    // client->draw3D();
+    client->draw3D();
   }
   {
     auto right_margin = 5.0f;
@@ -1255,7 +1258,7 @@ bool MjSimImpl::render()
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
   // @@@@@@@@@@@@@@@@@@@Here everything is displayed
-  record();
+  // record();
   
   // swap OpenGL buffers (blocking call due to v-sync)
   glfwSwapBuffers(window);

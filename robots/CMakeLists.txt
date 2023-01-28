@@ -12,9 +12,9 @@ set(HFIELD_PATH4 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD4}.png")
 set(HFIELD_PATH5 "/home/jrluser/mc_mujoco/robots/Heighmap/${HFIELD5}.png")
 
 add_subdirectory(jvrc_mj_description)
-add_subdirectory(hrp4cr_mj_description)
-add_subdirectory(hrp4j_mj_description)
-add_subdirectory(hrp4j_soft_mj_description)
+# add_subdirectory(hrp4cr_mj_description)
+# add_subdirectory(hrp4j_mj_description)
+# add_subdirectory(hrp4j_soft_mj_description)
 
 function(setup_env_object NAME ENV_OBJECT)
   set(YAML_OUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}.yaml")
