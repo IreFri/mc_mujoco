@@ -324,18 +324,23 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
 
   //****************************************************Start: Range Sensors******************************************************
 
-  // get of range sensors
-  auto getRangeSensors = [] (mc_rbdyn::Robot & robot) -> std::vector<mc_mujoco::RangeSensor *>
+  auto getDevices = [] (const mc_rbdyn::Robot & robot) -> mc_rbdyn::DevicePtrVector
   {
-    std::vector<mc_mujoco::RangeSensor *> out;
     const auto & module = robot.module();
     mc_rtc::log::info("[mc_mujoco] Robot {} Devices {}", robot.name(), module.devices().size());
-    for(const auto & s : module.devices())
+    return module.devices();
+  };
+
+  // get of range sensors
+  auto getRangeSensors = [] (mc_rbdyn::Robot & robot, const mc_rbdyn::DevicePtrVector & devices) -> std::vector<mc_mujoco::RangeSensor *>
+  {
+    std::vector<mc_mujoco::RangeSensor *> out;
+    for(const auto & s : devices)
     {
-      mc_rtc::log::info("[mc_mujoco] Device {}", s->name());
       auto sensor = dynamic_cast<mc_mujoco::RangeSensor *>(s.get());
       if(sensor)
       {
+        mc_rtc::log::info("[mc_mujoco] {} has a range sensor named {}", robot.name(), sensor->name());
         auto & robot_sensor = robot.sensor<mc_mujoco::RangeSensor>(sensor->name());
         out.push_back(&robot_sensor);
       }
@@ -343,9 +348,8 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
     return out;
   };
 
-  for(mc_mujoco::RangeSensor * rs : getRangeSensors(const_cast<mc_rbdyn::Robot &>(robot)))
+  for(mc_mujoco::RangeSensor * rs : getRangeSensors(const_cast<mc_rbdyn::Robot &>(robot), getDevices(robot)))
   {
-    mc_rtc::log::error("[mc_mujoco] Range sensor name {}", rs->name());
     ranges[rs->name()] = 0;
     ranges_ptr[rs->name()] = rs;
     init_sensor_id("range sensor", "range sensor", rs->name(), "ranger", mjSENS_RANGEFINDER, mc_rs_to_mj_ranger_id);
@@ -522,9 +526,10 @@ void MjSimImpl::setSimulationInitialState()
       const auto & robot = controller->robots().robot(r.name);
       r.initialize(model, robot);
       for(const auto & rs : r.ranges_ptr) //*
-      { //*
+      {
+        rs.second->removeFromLogger(controller->controller().logger());
         rs.second->addToLogger(controller->controller().logger(), robot.name()); //*
-      } //*
+      }
       if(r.root_joint.size())
       {
         r.root_qpos_idx = qInit.size();
