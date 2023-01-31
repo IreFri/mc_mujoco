@@ -329,10 +329,10 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
   {
     std::vector<mc_mujoco::RangeSensor *> out;
     const auto & module = robot.module();
-    mc_rtc::log::error("[mc_mujoco] Robot {} Devices {}", robot.name(), module.devices().size());
+    mc_rtc::log::info("[mc_mujoco] Robot {} Devices {}", robot.name(), module.devices().size());
     for(const auto & s : module.devices())
     {
-      mc_rtc::log::error("[mc_mujoco] Device {}", s->name());
+      mc_rtc::log::info("[mc_mujoco] Device {}", s->name());
       auto sensor = dynamic_cast<mc_mujoco::RangeSensor *>(s.get());
       if(sensor)
       {
@@ -343,7 +343,6 @@ void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
     return out;
   };
 
-  mc_rtc::log::error("[mc_mujoco] Initialization of range sensors");
   for(mc_mujoco::RangeSensor * rs : getRangeSensors(const_cast<mc_rbdyn::Robot &>(robot)))
   {
     mc_rtc::log::error("[mc_mujoco] Range sensor name {}", rs->name());
@@ -1082,8 +1081,6 @@ void MjSimImpl::simStep()
   //   const char * body2_c =  mj_id2name(model, mjOBJ_BODY, body2_id);
   //   std::cout << "Body1: " << body1_c << "\t" << "Body2: " << body2_c << std::endl;
   // }
-
-  // mj_printData(model, data, "/tmp/ntm.txt");
 }
 
 void MjSimImpl::resetSimulation(const std::map<std::string, std::vector<double>> & reset_qs,
