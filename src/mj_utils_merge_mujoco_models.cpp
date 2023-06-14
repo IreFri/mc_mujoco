@@ -90,6 +90,7 @@ static void merge_mujoco_option(const std::string & fileIn, const pugi::xml_node
 static void add_prefix(const std::string & prefix, pugi::xml_node & n, const char * attr)
 {
   auto n_attr = n.attribute(attr);
+  // std::cout << "add_prefix " << prefix << std::endl;
   if(n_attr)
   {
     n_attr.set_value(fmt::format("{}_{}", prefix, n_attr.value()).c_str());
@@ -489,10 +490,13 @@ std::string merge_mujoco_models(const std::map<std::string, std::string> & mujoc
   out.append_attribute("model").set_value("mc_mujoco");
   for(const auto & [name, xmlFile] : mujocoObjects)
   {
+    std::cout << name << std::endl;
     merge_mujoco_model(name, xmlFile, out);
   }
+   std::cout << "------------------------" << std::endl;
   for(const auto & [name, xmlFile] : mcrtcObjects)
   {
+     std::cout << name << std::endl;
     merge_mujoco_model(name, xmlFile, out);
     mjRobots.push_back(mj_robot_from_xml(name, xmlFile, name));
   }
