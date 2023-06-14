@@ -532,6 +532,7 @@ std::string merge_mujoco_models(const std::map<std::string, std::string> & mujoc
   out.append_attribute("model").set_value("mc_mujoco");
   for(const auto & [name, xmlFile] : mujocoObjects)
   {
+    std::cout << name << std::endl;
     merge_mujoco_model(name, xmlFile, out);
     // FIXME This is required pre-C++20 to capture structured binding value
     const auto & name2 = name;
@@ -543,8 +544,10 @@ std::string merge_mujoco_models(const std::map<std::string, std::string> & mujoc
     }
     mj_object_from_xml(name, xmlFile, *it);
   }
+   std::cout << "------------------------" << std::endl;
   for(const auto & [name, xmlFile] : mcrtcObjects)
   {
+     std::cout << name << std::endl;
     merge_mujoco_model(name, xmlFile, out);
     mjRobots.push_back(mj_robot_from_xml(name, xmlFile, name));
   }

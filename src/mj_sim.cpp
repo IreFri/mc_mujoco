@@ -715,35 +715,6 @@ void MjSimImpl::startSimulation()
 
   //****************************************************End: Passive force components******************************************************
 
-  //****************************************************Start: Variable Stiffness components******************************************************
-
-  auto stiffnessToAngle = [this](double VarStiff) 
-  {
-    double angle_low = 0;
-    double angle_high = 1;
-    double stiffness_low = 0;
-    double stiffness_high = 100;
-    return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
-  };
-
-  int idx_phalanx = 0;
-  for(int k = 0; k < mj_jnt_names.size(); ++k)
-  {      
-    if(mj_jnt_names[k] == "hrp4j_soft_R_PHALANX_10")
-    {
-      idx_phalanx = k;
-      break;
-    }
-  }
-  
-  if(controller->robot().hasJoint("R_VARSTIFF"))
-  {
-    controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
-    controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
-  }
-
-  //****************************************************End: Variable Stiffness components******************************************************
-
   setSimulationInitialState();
   if(!config.with_controller)
   {
@@ -765,12 +736,44 @@ void MjSimImpl::startSimulation()
     r.initialize(model, controller->robot(r.name));
     controller->setEncoderValues(r.name, r.encoders);
   }
+
+  //****************************************************Start: Variable Stiffness components******************************************************
+
+  auto stiffnessToAngle = [this](double VarStiff) 
+  {
+    double angle_low = 0;
+    double angle_high = 1;
+    double stiffness_low = 0;
+    double stiffness_high = 100;
+    return angle_low+(VarStiff-stiffness_low)*(angle_high-angle_low)/(stiffness_high-stiffness_low);
+  };
+
+  int idx_phalanx = 0;
+  for(int k = 0; k < mj_jnt_names.size(); ++k)
+  {      
+    if(mj_jnt_names[k] == controller->robot().name()+"_R_PHALANX_10")
+    {
+      idx_phalanx = k;
+      break;
+    }
+  }
+
+  //****************************************************End: Variable Stiffness components******************************************************
+
   for(const auto & r : robots)
   {
     init_qs_[r.name] = controller->robot(r.name).encoderValues();
     init_pos_[r.name] = controller->controller().robot(r.name).posW();
   }
   controller->init(init_qs_, init_pos_);
+
+  if(controller->robot().hasJoint("R_VARSTIFF"))
+  {
+    controller->robot().q()[controller->robot().jointIndexByName("R_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+    controller->robot().q()[controller->robot().jointIndexByName("L_VARSTIFF")][0] = stiffnessToAngle(stiffness(idx_phalanx));
+    mc_rtc::log::warning("Setup R/L_VARSTIFF to {}", stiffnessToAngle(stiffness(idx_phalanx)));
+  }
+
   controller->running = true;
   setSimulationInitialState();
 
@@ -974,8 +977,11 @@ bool MjSimImpl::controlStep()
 
 
 // **********************************************Start: Update variable stiffness**********************************************************      
-      if(r.name == "hrp4j_soft" && VARIABLE_STIFFNESS_ACTIVE)
+      bool is_variable_on_in_config = controller->controller().config().has("with_variable_stiffness") && controller->controller().config()("with_variable_stiffness");
+      // if(r.name.find("soft") != std::string::npos && VARIABLE_STIFFNESS_ACTIVE)
+      if(r.name.find("soft") != std::string::npos && is_variable_on_in_config)
       {   
+        const std::string& robot_name = r.name;
         const auto & mj_jnt_names = r.mj_jnt_names;
         const auto & mj_jnt_ids = r.mj_jnt_ids;
 
@@ -1016,7 +1022,7 @@ bool MjSimImpl::controlStep()
         {      
           for(int i = 0; i < NUMBER_VAR_JOINTS; ++ i)
           {
-            std::string varStiff_name = "hrp4j_soft_"+prefix[i]+"_VARSTIFF";
+            std::string varStiff_name = robot_name+"_"+prefix[i]+"_VARSTIFF";
             if(mj_jnt_names[k] == varStiff_name)
             {
               VarStiffIndices[i] = mj_jnt_ids[k]-1;
@@ -1025,7 +1031,7 @@ bool MjSimImpl::controlStep()
             {
               for(int j = 1; j < NUMBER_SOFT_JOINTS+1; ++j)
               {
-                std::string phalanx_name = "hrp4j_soft_"+prefix[i]+"_PHALANX_"+std::to_string(j);
+                std::string phalanx_name = robot_name+"_"+prefix[i]+"_PHALANX_"+std::to_string(j);
                 if(mj_jnt_names[k] == phalanx_name)
                 {
                   softIndices[i][j-1] = mj_jnt_ids[k]-1;
@@ -1199,7 +1205,7 @@ bool MjSimImpl::render()
 
   // @@@@@@@@@@@@@Here only the robot and the steps on the ground are displayed
   // call this to record the video
-  // record();
+  record();
 
   // This is called here to display some elements as markers and to do not record them
   // If you do not want them you have to comment those lines
