@@ -1,21 +1,133 @@
+
 <mujoco model="ground">
+  <compiler angle="radian"/>
 
-    <visual>
-      <headlight diffuse="0.6 0.6 0.6"  ambient="0.3 0.3 0.3" specular="0 0 0"/>
-      <rgba haze="0.15 0.25 0.35 1"/>
-    </visual>
+  <default>
+    <default class="collision">
+      <geom condim="3" group="0" type="mesh" />
+    </default>
+    <default class="visual">
+      <geom group="1" conaffinity="0" contype="0" type="mesh" />
+    </default>
+  </default>
 
-    <asset>
-        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+  <asset>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4"
+        rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="1 1"
+        reflectance="0.2"/>
+  </asset>
 
-        <texture name="texplane" type="2d" builtin="checker" rgb1=".2 .3 .4" rgb2=".1 0.15 0.2" width="512" height="512" mark="cross" markrgb=".8 .8 .8"/>  
-        <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1" texuniform="true"/>
-    </asset>
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <body name="base_link">
+      <geom name="floor" pos="0 0 0" size="0 0 .25" type="plane" material="groundplane" condim="3" group="1"/>
+    </body>
 
-    <worldbody>
-      <light pos="0 0 2" dir="0 0 -1" directional="true"/>
-      <!-- <body name="base_link">
-        <geom name="floor" pos="0 0 0.0" size="0 0 .25" type="plane" material="matplane" condim="3" group="1"/>
-      </body> -->
-    </worldbody>
-</mujoco> 
+  <body pos="0.3591064455335142 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="0.3391064455335142 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="0.3191064455335142 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="0.6093473660397495 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="0.5893473660397495 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="0.5693473660397494 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="0.8470936863712788 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="0.8270936863712788 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="0.8070936863712788 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="1.0848853912387408 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="1.0648853912387408 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="1.0448853912387408 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="1.3374115239735966 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="1.3174115239735966 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="1.2974115239735966 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="1.5352728551654362 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="1.5152728551654362 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="1.4952728551654362 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="1.7410432866760572 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="1.7210432866760572 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="1.7010432866760572 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  <body pos="1.9561466200502278 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.06" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.06" mass="10.0"/>
+  </body>
+  <body pos="1.9361466200502278 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.04" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.04" mass="10.0"/>
+  </body>
+  <body pos="1.9161466200502277 0.0 0">
+    <geom class="collision" type="box" size="0.01 1. 0.02" mass="10.0"/>
+    <geom class="visual"    type="box" size="0.01 1. 0.02" mass="10.0"/>
+  </body>
+
+  </worldbody>
+
+</mujoco>
