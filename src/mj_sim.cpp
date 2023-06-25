@@ -1396,7 +1396,12 @@ void MjSimImpl::record()
   // save frames for video
   if(config.recording && !config.step_by_step && ((data->time - frametime_) > 1.0 / 30.0 || frametime_== 0 ))
   {
-    mjrRect viewport =  mjr_maxViewport(&context);
+    mjrRect viewport;
+#ifdef USE_UI_ADAPTER
+  viewport = mjr_maxViewport(&platform_ui_adapter->mjr_context());
+#else
+  viewport = mjr_maxViewport(&context);
+#endif
     int W = viewport.width;
     int H = viewport.height;
 
@@ -1408,7 +1413,12 @@ void MjSimImpl::record()
       mju_error("Could not allocate buffers");
     }
 
+#ifdef USE_UI_ADAPTER
+    mjr_readPixels(rgb, depth, viewport, &platform_ui_adapter->mjr_context());
+#else
+    viewport = mjr_maxViewport(&context);
     mjr_readPixels(rgb, depth, viewport, &context);
+#endif
 
     stbi_flip_vertically_on_write(true);
     std::stringstream filename;
