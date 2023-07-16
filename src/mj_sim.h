@@ -4,6 +4,8 @@
 #include <mc_rtc/config.h>
 #include <mc_rtc/logging.h>
 
+#include "mujoco.h"
+
 #include "mj_configuration.h"
 
 namespace mc_mujoco
@@ -56,6 +58,11 @@ public:
    */
   mc_control::MCGlobalController * controller() noexcept;
 
+  /** Return the MuJoCo model */
+  mjModel & model() noexcept;
+
+  /** Return the MuJoCo data */
+  mjData & data() noexcept;
   const MjConfiguration & config() const;
 
 private:

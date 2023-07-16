@@ -113,14 +113,20 @@ bool MjRobot::loadGain(const std::string & path_to_pd, const std::vector<std::st
 MjSimImpl::MjSimImpl(const MjConfiguration & config)
 : controller(std::make_unique<mc_control::MCGlobalController>(config.mc_config)), config(config)
 {
+  auto get_robot_cfg_path_local = [&](const std::string & robot_name) {
+    return bfs::path(mc_mujoco::USER_FOLDER) / (robot_name + ".yaml");
+  };
+  auto get_robot_cfg_path_global = [&](const std::string & robot_name) {
+    return bfs::path(mc_mujoco::SHARE_FOLDER) / (robot_name + ".yaml");
+  };
   auto get_robot_cfg_path = [&](const std::string & robot_name) -> std::string {
-    if(bfs::exists(bfs::path(mc_mujoco::USER_FOLDER) / (robot_name + ".yaml")))
+    if(bfs::exists(get_robot_cfg_path_local(robot_name)))
     {
-      return (bfs::path(mc_mujoco::USER_FOLDER) / (robot_name + ".yaml")).string();
+      return get_robot_cfg_path_local(robot_name).string();
     }
-    else if(bfs::exists(bfs::path(mc_mujoco::SHARE_FOLDER) / (robot_name + ".yaml")))
+    else if(bfs::exists(get_robot_cfg_path_global(robot_name)))
     {
-      return (bfs::path(mc_mujoco::SHARE_FOLDER) / (robot_name + ".yaml")).string();
+      return get_robot_cfg_path_global(robot_name).string();
     }
     else
     {
@@ -149,15 +155,16 @@ MjSimImpl::MjSimImpl(const MjConfiguration & config)
   {
     MjObject object;
     object.name = static_cast<std::string>(co.first);
-    object.init_pose = static_cast<sva::PTransformd>(co.second("init_pos"));
+    object.init_pose = static_cast<sva::PTransformd>(co.second("init_pos", sva::PTransformd::Identity()));
     objects.push_back(object);
 
     std::string module = co.second("module");
-    auto object_cfg_path = (bfs::path(mc_mujoco::SHARE_FOLDER) / (module + ".yaml")).string();
-    if(!bfs::exists(object_cfg_path))
+    auto object_cfg_path = get_robot_cfg_path(module);
+    if(object_cfg_path.empty())
     {
-      mc_rtc::log::error_and_throw<std::runtime_error>("[mc_mujoco] config cannot be found at {} for {} object",
-                                                       object_cfg_path, co.first);
+      mc_rtc::log::error_and_throw<std::runtime_error>(
+          "[mc_mujoco] Module ({}) cannot be found at for object {}.\nTried:\n- {}\n- {}", module, co.first,
+          get_robot_cfg_path_local(module).string(), get_robot_cfg_path_global(module).string());
     }
     auto object_cfg = mc_rtc::Configuration(object_cfg_path);
     if(!object_cfg.has("xmlModelPath"))
@@ -235,6 +242,20 @@ MjSimImpl::MjSimImpl(const MjConfiguration & config)
 void MjSimImpl::cleanup()
 {
   mujoco_cleanup(this);
+}
+
+void MjObject::initialize(mjModel * model)
+{
+  if(root_body.size())
+  {
+    root_body_id = mj_name2id(model, mjOBJ_BODY, root_body.c_str());
+  }
+  if(root_joint.size())
+  {
+    auto root_joint_id = mj_name2id(model, mjOBJ_JOINT, root_joint.c_str());
+    root_qpos_idx = model->jnt_qposadr[root_joint_id];
+    root_qvel_idx = model->jnt_dofadr[root_joint_id];
+  }
 }
 
 void MjRobot::initialize(mjModel * model, const mc_rbdyn::Robot & robot)
@@ -454,19 +475,47 @@ void MjSimImpl::setSimulationInitialState()
 
     for(auto & o : objects)
     {
-      sva::PTransformd pose = o.init_pose;
-      const auto & t = pose.translation();
-      for(size_t i = 0; i < 3; ++i)
+      o.initialize(model);
+      auto start_q = 0;
+      auto start_dof = 0;
+      if(o.root_qpos_idx != -1 && o.root_joint_type == mjJNT_FREE)
       {
-        qInit.push_back(t[i]);
-        alphaInit.push_back(0);
-        alphaInit.push_back(0);
+        sva::PTransformd pose = o.init_pose;
+        const auto & t = pose.translation();
+        for(size_t i = 0; i < 3; ++i)
+        {
+          qInit.push_back(t[i]);
+          alphaInit.push_back(0);
+          alphaInit.push_back(0);
+        }
+        Eigen::Quaterniond q = Eigen::Quaterniond(pose.rotation()).inverse();
+        qInit.push_back(q.w());
+        qInit.push_back(q.x());
+        qInit.push_back(q.y());
+        qInit.push_back(q.z());
+        start_q = 7;
+        start_dof = 6;
       }
-      Eigen::Quaterniond q = Eigen::Quaterniond(pose.rotation()).inverse();
-      qInit.push_back(q.w());
-      qInit.push_back(q.x());
-      qInit.push_back(q.y());
-      qInit.push_back(q.z());
+      else if(o.root_body_id != -1)
+      {
+        const auto & t = o.init_pose.translation();
+        model->body_pos[3 * o.root_body_id + 0] = t.x();
+        model->body_pos[3 * o.root_body_id + 1] = t.y();
+        model->body_pos[3 * o.root_body_id + 2] = t.z();
+        Eigen::Quaterniond q = Eigen::Quaterniond(o.init_pose.rotation()).inverse();
+        model->body_quat[4 * o.root_body_id + 0] = q.w();
+        model->body_quat[4 * o.root_body_id + 1] = q.x();
+        model->body_quat[4 * o.root_body_id + 2] = q.y();
+        model->body_quat[4 * o.root_body_id + 3] = q.z();
+      }
+      for(int i = start_q; i < o.nq; ++i)
+      {
+        qInit.push_back(0.0);
+      }
+      for(int i = start_dof; i < o.ndof; ++i)
+      {
+        alphaInit.push_back(0.0);
+      }
     }
 
     for(auto & r : robots)
@@ -1144,7 +1193,25 @@ bool MjSimImpl::render()
   }
 
   // mj render
+#ifdef USE_UI_ADAPTER
+  mjr_render(platform_ui_adapter->state().rect[0], &scene, &platform_ui_adapter->mjr_context());
+#else
   mjr_render(uistate.rect[0], &scene, &context);
+#endif
+
+  // @@@@@@@@@@@@@Here only the robot and the steps on the ground are displayed
+  // call this to record the video
+  record();
+
+  // This is called here to display some elements as markers and to do not record them
+  // If you do not want them you have to comment those lines
+  // --> From here
+  // if(client)
+  // {
+  //   client->updateScene(scene);
+  // }
+  // mjr_render(uistate.rect[0], &scene, &context);
+  // --> Until here
 
   // @@@@@@@@@@@@@Here only the robot and the steps on the ground are displayed
   // call this to record the video
@@ -1171,8 +1238,13 @@ bool MjSimImpl::render()
   if(client)
   {
     client->update();
-    // @@@@@@@@@@@@@@Here the robot, and geometries elements
+#ifdef USE_UI_ADAPTER
+    client->draw2D(*platform_ui_adapter);
+#else
     client->draw2D(window);
+#endif
+    client->draw3D();
+    // @@@@@@@@@@@@@@Here the robot, and geometries elements
     // ***************Start: Lines to uncomment to have GUI of the plot (and write --recording)***************************
     // ImGui::Render();
     // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1200,6 +1272,7 @@ bool MjSimImpl::render()
     }
     ImGui::Text("Average sim time: %.2fμs", mj_sim_dt_average);
     ImGui::Text("Simulation/Real time: %.2f", mj_sim_dt_average / (1e6 * model->opt.timestep));
+    ImGui::Text("Wallclock time: %.2fs", wallclock);
     if(ImGui::Checkbox("Sync with real-time", &config.sync_real_time))
     {
       if(config.sync_real_time)
@@ -1269,9 +1342,17 @@ bool MjSimImpl::render()
   // record();
   
   // swap OpenGL buffers (blocking call due to v-sync)
+#ifdef USE_UI_ADAPTER
+  platform_ui_adapter->SwapBuffers();
+#else
   glfwSwapBuffers(window);
+#endif
 
+#ifdef USE_UI_ADAPTER
+  return !platform_ui_adapter->ShouldCloseWindow();
+#else
   return !glfwWindowShouldClose(window);
+#endif
 }
 
 void MjSimImpl::stopSimulation() {}
@@ -1315,6 +1396,7 @@ void MjSimImpl::saveGUISettings()
   visualize_c.add("visuals", static_cast<bool>(options.geomgroup[1]));
   visualize_c.add("contact-points", static_cast<bool>(options.flags[mjVIS_CONTACTPOINT]));
   visualize_c.add("contact-forces", static_cast<bool>(options.flags[mjVIS_CONTACTFORCE]));
+  visualize_c.add("contact-split", static_cast<bool>(options.flags[mjVIS_CONTACTSPLIT]));
   config.save(config_path);
   mc_rtc::log::success("[mc_mujoco] Configuration saved to {}", config_path);
 }
@@ -1324,7 +1406,12 @@ void MjSimImpl::record()
   // save frames for video
   if(config.recording && !config.step_by_step && ((data->time - frametime_) > 1.0 / 30.0 || frametime_== 0 ))
   {
-    mjrRect viewport =  mjr_maxViewport(&context);
+    mjrRect viewport;
+#ifdef USE_UI_ADAPTER
+  viewport = mjr_maxViewport(&platform_ui_adapter->mjr_context());
+#else
+  viewport = mjr_maxViewport(&context);
+#endif
     int W = viewport.width;
     int H = viewport.height;
 
@@ -1336,7 +1423,12 @@ void MjSimImpl::record()
       mju_error("Could not allocate buffers");
     }
 
+#ifdef USE_UI_ADAPTER
+    mjr_readPixels(rgb, depth, viewport, &platform_ui_adapter->mjr_context());
+#else
+    viewport = mjr_maxViewport(&context);
     mjr_readPixels(rgb, depth, viewport, &context);
+#endif
 
     stbi_flip_vertically_on_write(true);
     std::stringstream filename;
@@ -1394,6 +1486,16 @@ const MjConfiguration & MjSim::config() const
 mc_control::MCGlobalController * MjSim::controller() noexcept
 {
   return impl->get_controller();
+}
+
+mjModel & MjSim::model() noexcept
+{
+  return *impl->model;
+}
+
+mjData & MjSim::data() noexcept
+{
+  return *impl->data;
 }
 
 } // namespace mc_mujoco

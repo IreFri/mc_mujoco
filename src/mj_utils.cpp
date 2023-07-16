@@ -1,6 +1,11 @@
 #include "glfw3.h"
 #include "mujoco.h"
-#include "uitools.h"
+
+#ifndef USE_UI_ADAPTER
+#  include "uitools.h"
+#else
+#  include "our_glfw_adapter.h"
+#endif
 
 #include "mj_utils.h"
 
@@ -45,7 +50,11 @@ void uiLayout(mjuiState * state)
   // rect 0: entire framebuffer
   rect[0].left = 0;
   rect[0].bottom = 0;
+#ifdef USE_UI_ADAPTER
+  std::tie(rect[0].width, rect[0].height) = mj_sim->platform_ui_adapter->GetFramebufferSize();
+#else
   glfwGetFramebufferSize(mj_sim->window, &rect[0].width, &rect[0].height);
+#endif
 }
 
 // handle UI event
@@ -71,7 +80,28 @@ void uiEvent(mjuiState * state)
     // F: show contact forces
     if(state->key == GLFW_KEY_F)
     {
-      mj_sim->options.flags[mjVIS_CONTACTFORCE] = !mj_sim->options.flags[mjVIS_CONTACTFORCE];
+      if(!mj_sim->options.flags[mjVIS_CONTACTFORCE])
+      {
+        mj_sim->options.flags[mjVIS_CONTACTFORCE] = 1;
+        mj_sim->options.flags[mjVIS_CONTACTSPLIT] = 0;
+      }
+      else
+      {
+        if(!mj_sim->options.flags[mjVIS_CONTACTSPLIT])
+        {
+          mj_sim->options.flags[mjVIS_CONTACTSPLIT] = 1;
+        }
+        else
+        {
+          mj_sim->options.flags[mjVIS_CONTACTFORCE] = 0;
+          mj_sim->options.flags[mjVIS_CONTACTSPLIT] = 0;
+        }
+      }
+    }
+    // R: show rangefinder
+    if(state->key == GLFW_KEY_R)
+    {
+      mj_sim->options.flags[mjVIS_RANGEFINDER] = !mj_sim->options.flags[mjVIS_RANGEFINDER];
     }
     // R: show rangefinder
     if(state->key == GLFW_KEY_R)
@@ -292,7 +322,7 @@ bool mujoco_init(MjSimImpl * mj_sim,
 #endif
 
   // Load the model;
-  std::string model = merge_mujoco_models(mujocoObjects, mcrtcObjects, mj_sim->robots);
+  std::string model = merge_mujoco_models(mujocoObjects, mcrtcObjects, mj_sim->objects, mj_sim->robots);
   char error[1000] = "Could not load XML model";
   mj_sim->model = mj_loadXML(model.c_str(), 0, error, 1000);
   if(!mj_sim->model)
@@ -309,6 +339,10 @@ bool mujoco_init(MjSimImpl * mj_sim,
 
 void mujoco_create_window(MjSimImpl * mj_sim)
 {
+#ifdef USE_UI_ADAPTER
+  mj_sim->platform_ui_adapter.reset(new mujoco::GlfwAdapter());
+  mj_sim->platform_ui_adapter->SetWindowTitle("mc_mujoco");
+#else
   // Initialize GLFW
   if(!glfw_initialized)
   {
@@ -328,6 +362,7 @@ void mujoco_create_window(MjSimImpl * mj_sim)
   glfwMakeContextCurrent(mj_sim->window);
   glfwSwapInterval(1);
   glfwSetWindowUserPointer(mj_sim->window, static_cast<void *>(mj_sim));
+#endif
 
   // initialize visualization data structures
   auto config = [&]() -> mc_rtc::Configuration {
@@ -366,21 +401,38 @@ void mujoco_create_window(MjSimImpl * mj_sim)
   mj_sim->options.geomgroup[1] = mj_sim->config.visualize_visual.value_or(visualize("visuals", true));
   mj_sim->options.flags[mjVIS_CONTACTPOINT] = visualize("contact-points", false);
   mj_sim->options.flags[mjVIS_CONTACTFORCE] = visualize("contact-forces", false);
+  mj_sim->options.flags[mjVIS_CONTACTSPLIT] = visualize("contact-split", false);
   mjv_defaultScene(&mj_sim->scene);
+#ifndef USE_UI_ADAPTER
   mjr_defaultContext(&mj_sim->context);
+#endif
 
   // create scene and context
   mjv_makeScene(mj_sim->model, &mj_sim->scene, 2000);
+#ifdef USE_UI_ADAPTER
+  mjr_makeContext(mj_sim->model, &mj_sim->platform_ui_adapter->mjr_context(), mjFONTSCALE_150);
+#else
   mjr_makeContext(mj_sim->model, &mj_sim->context, mjFONTSCALE_150);
+#endif
 
   // install GLFW event callback
-  mj_sim->uistate.userdata = static_cast<void *>(mj_sim);
-#if mjVERSION_HEADER >= 230
-  uiSetCallback(mj_sim->window, &mj_sim->uistate, uiEvent, uiLayout, uiRender, nullptr);
+#ifdef USE_UI_ADAPTER
+  auto & uistate = mj_sim->platform_ui_adapter->state();
 #else
-  uiSetCallback(mj_sim->window, &mj_sim->uistate, uiEvent, uiLayout);
+  auto & uistate = mj_sim->uistate;
 #endif
-  uiLayout(&mj_sim->uistate);
+  uistate.userdata = static_cast<void *>(mj_sim);
+#ifndef USE_UI_ADAPTER
+#  if mjVERSION_HEADER >= 230
+  uiSetCallback(mj_sim->window, &mj_sim->uistate, uiEvent, uiLayout, uiRender, nullptr);
+#  else
+  uiSetCallback(mj_sim->window, &mj_sim->uistate, uiEvent, uiLayout);
+#  endif
+#else
+  mj_sim->platform_ui_adapter->SetEventCallback(uiEvent);
+  mj_sim->platform_ui_adapter->SetLayoutCallback(uiLayout);
+#endif
+  uiLayout(&uistate);
 
   /** Initialize Dear Imgui */
 
@@ -426,7 +478,12 @@ void mujoco_create_window(MjSimImpl * mj_sim)
   style.FrameRounding = 6.0f;
   auto & bgColor = style.Colors[ImGuiCol_WindowBg];
   bgColor.w = 0.5f;
+#ifdef USE_UI_ADAPTER
+  auto & glfw_adapter = *dynamic_cast<mujoco::GlfwAdapter *>(mj_sim->platform_ui_adapter.get());
+  ImGui_ImplGlfw_InitForOpenGL(glfw_adapter.window_, true);
+#else
   ImGui_ImplGlfw_InitForOpenGL(mj_sim->window, true);
+#endif
   ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
@@ -458,11 +515,15 @@ void mujoco_cleanup(MjSimImpl * mj_sim)
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
+#ifndef USE_UI_ADAPTER
     glfwDestroyWindow(mj_sim->window);
+#endif
 
     // free visualization storage
     mjv_freeScene(&mj_sim->scene);
+#ifndef USE_UI_ADAPTER
     mjr_freeContext(&mj_sim->context);
+#endif
   }
 
   // free MuJoCo model and data, deactivate

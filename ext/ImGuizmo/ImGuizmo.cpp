@@ -24,10 +24,11 @@
 // SOFTWARE.
 //
 
-#include "imgui.h"
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
 #endif
+
+#include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
 
@@ -644,7 +645,7 @@ namespace IMGUIZMO_NAMESPACE
 
    struct Context
    {
-      Context() : mbUsing(false), mbEnable(true), mbUsingBounds(false)
+      Context() : mFixedSize(false), mbUsing(false), mbEnable(true), mbUsingBounds(false)
       {
       }
 
@@ -674,6 +675,9 @@ namespace IMGUIZMO_NAMESPACE
       ImVec2 mScreenSquareCenter;
       ImVec2 mScreenSquareMin;
       ImVec2 mScreenSquareMax;
+
+      bool mFixedSize;
+      float mGizmoSizeWorldSpace;
 
       float mScreenFactor;
       vec_t mRelativeOrigin;
@@ -1046,6 +1050,11 @@ namespace IMGUIZMO_NAMESPACE
       rightViewInverse.TransformVector(gContext.mModelInverse);
       float rightLength = GetSegmentLengthClipSpace(makeVect(0.f, 0.f), rightViewInverse);
       gContext.mScreenFactor = gContext.mGizmoSizeClipSpace / rightLength;
+
+      if(gContext.mFixedSize)
+      {
+        gContext.mScreenFactor = gContext.mGizmoSizeWorldSpace;
+      }
 
       ImVec2 centerSSpace = worldToPos(makeVect(0.f, 0.f), gContext.mMVP);
       gContext.mScreenSquareCenter = centerSSpace;
@@ -2465,7 +2474,14 @@ namespace IMGUIZMO_NAMESPACE
 
    void SetGizmoSizeClipSpace(float value)
    {
+      gContext.mFixedSize = false;
       gContext.mGizmoSizeClipSpace = value;
+   }
+
+   void SetGizmoSizeWorldSpace(float value)
+   {
+      gContext.mFixedSize = true;
+      gContext.mGizmoSizeWorldSpace = value;
    }
 
    ///////////////////////////////////////////////////////////////////////////////////////////////////
