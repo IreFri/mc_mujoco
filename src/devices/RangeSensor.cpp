@@ -13,7 +13,7 @@ mc_rbdyn::DevicePtr RangeSensor::clone() const
   return mc_rbdyn::DevicePtr(new RangeSensor(name_, parent_, X_p_s_));
 }
 
-void RangeSensor::update(const double & data)
+void RangeSensor::update(const double & data, const double & time)
 {
   // config_.minAngle = data.config.minAngle;
   // config_.maxAngle = data.config.maxAngle;
@@ -23,6 +23,7 @@ void RangeSensor::update(const double & data)
   // config_.rangeRes = data.config.rangeRes;
   // config_.frequency = data.config.frequency;
   data_ = data;
+  time_ = time;
 }
 
 void RangeSensor::addToLogger(mc_rtc::Logger & logger, const std::string & prefixIn)

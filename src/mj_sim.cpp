@@ -866,7 +866,10 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
   for(auto & rs : ranges)
   {
     mujoco_get_sensordata(*model, *data, mc_rs_to_mj_ranger_id[rs.first], &rs.second);
-    ranges_ptr[rs.first]->update(rs.second);
+    if(data->time - ranges_ptr[rs.first]->time() > 0.1)
+    {
+      ranges_ptr[rs.first]->update(rs.second, data->time);
+    }
   }
 
 //****************************************************End: Range Sensors******************************************************
