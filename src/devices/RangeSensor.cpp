@@ -26,6 +26,18 @@ void RangeSensor::update(const double & data, const double & time)
   time_ = time;
 }
 
+void RangeSensor::update(const Eigen::Vector3d & point, const double & time)
+{
+  update({point}, time);
+}
+
+void RangeSensor::update(const std::vector<Eigen::Vector3d> & points, const double & time)
+{
+  time_ = time;
+  points_ = points;
+  data_ = points[0].z();
+}
+
 void RangeSensor::addToLogger(mc_rtc::Logger & logger, const std::string & prefixIn)
 {
   auto prefix = prefixIn.size() ? fmt::format("{}_{}_", prefixIn, name_) : name_ + "_";

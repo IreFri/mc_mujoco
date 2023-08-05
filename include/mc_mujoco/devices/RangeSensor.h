@@ -40,6 +40,16 @@ struct MC_MUJOCO_DEVICES_DLLAPI RangeSensor : public mc_rbdyn::Device
     return data_;
   }
 
+  inline const Eigen::Vector3d & point() const noexcept
+  {
+    return points_.front();
+  }
+
+  inline const std::vector<Eigen::Vector3d> & points() const noexcept
+  {
+    return points_;
+  }
+
   /** Return the latest range sensing time, might be empty */
   inline const double & time() const noexcept
   {
@@ -58,6 +68,10 @@ struct MC_MUJOCO_DEVICES_DLLAPI RangeSensor : public mc_rbdyn::Device
   /** Update the sensor configuration and data from an OpenRTM message */
   void update(const double & data, const double & time);
 
+  void update(const Eigen::Vector3d & point, const double & time);
+
+  void update(const std::vector<Eigen::Vector3d> & points, const double & time);
+
   /** Add the sensor to a logger */
   void addToLogger(mc_rtc::Logger & logger, const std::string & prefix);
 
@@ -69,6 +83,7 @@ struct MC_MUJOCO_DEVICES_DLLAPI RangeSensor : public mc_rbdyn::Device
 private:
   Configuration config_;
   double data_;
+  std::vector<Eigen::Vector3d> points_;
   double time_;
 };
 
