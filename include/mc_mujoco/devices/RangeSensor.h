@@ -66,6 +66,11 @@ struct MC_MUJOCO_DEVICES_DLLAPI RangeSensor : public mc_rbdyn::Device
   }
 
   /** Update the sensor configuration and data from an OpenRTM message */
+  void update(const double & data)
+  {
+    data_ = data;
+  }
+
   void update(const double & data, const double & time);
 
   void update(const Eigen::Vector3d & point, const double & time);

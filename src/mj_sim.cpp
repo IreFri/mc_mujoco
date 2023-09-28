@@ -866,7 +866,7 @@ void MjRobot::updateSensors(mc_control::MCGlobalController * gc, mjModel * model
   for(auto & rs : ranges)
   {
     mujoco_get_sensordata(*model, *data, mc_rs_to_mj_ranger_id[rs.first], &rs.second);
-    if(data->time - ranges_ptr[rs.first]->time() > 0.1)
+    // if(data->time - ranges_ptr[rs.first]->time() > 0.1)
     {
       ranges_ptr[rs.first]->update(rs.second, data->time);
     }
@@ -1216,20 +1216,6 @@ bool MjSimImpl::render()
   // mjr_render(uistate.rect[0], &scene, &context);
   // --> Until here
 
-  // @@@@@@@@@@@@@Here only the robot and the steps on the ground are displayed
-  // call this to record the video
-  record();
-
-  // This is called here to display some elements as markers and to do not record them
-  // If you do not want them you have to comment those lines
-  // --> From here
-  // if(client)
-  // {
-  //   client->updateScene(scene);
-  // }
-  // mjr_render(uistate.rect[0], &scene, &context);
-  // --> Until here
-
   // Render ImGui
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -1246,14 +1232,14 @@ bool MjSimImpl::render()
 #else
     client->draw2D(window);
 #endif
-    client->draw3D();
+    // client->draw3D();
     // @@@@@@@@@@@@@@Here the robot, and geometries elements
     // ***************Start: Lines to uncomment to have GUI of the plot (and write --recording)***************************
     // ImGui::Render();
     // ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     // record();
     // ***************End: Lines to uncomment to have GUI of the plot***************************
-    client->draw3D();
+    // client->draw3D();
   }
   {
     auto right_margin = 5.0f;
